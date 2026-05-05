@@ -78,14 +78,15 @@ parts:
       snapcraftctl build
 
     prime:
-      - -ui
-      - -apps
-      - -test
-      - -docs
-      - -scripts
-      - -test-fixtures
-      - -vendor
-      - -.*
+      - openclaw.mjs
+      - package.json
+      - dist/
+      - extensions/
+      - node_modules/
+      - skills/
+      - bin/
+      - lib/
+      - usr/
 
   scripts:
     plugin: dump
