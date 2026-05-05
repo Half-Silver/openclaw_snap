@@ -63,9 +63,8 @@ parts:
     stage-packages:
       - libasound2
     override-build: |
-      # Enable corepack and prepare pnpm as used in the project
-      corepack enable
-      corepack prepare pnpm@10.33.2 --activate
+      # Install pnpm via npm since corepack might not be in the path during build
+      npm install -g pnpm@10.33.2
       
       # Install dependencies and build
       pnpm install --frozen-lockfile
