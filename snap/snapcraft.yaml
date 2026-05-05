@@ -48,22 +48,38 @@ layout:
 
 parts:
   openclaw:
-    plugin: npm
+    plugin: nil
     source: .
-    npm-include-node: true
-    npm-node-version: 22.14.0
     build-packages:
       - python3
       - make
       - gcc
       - g++
+      - curl
+      - tar
     stage-packages:
       - libasound2
     override-build: |
-      # Install pnpm via npm since corepack might not be in the path during build
-      npm install -g pnpm@10.33.2
+      # Determine Node.js architecture
+      DPKG_ARCH=$(dpkg --print-architecture)
+      if [ "$DPKG_ARCH" = "arm64" ]; then
+        NODE_ARCH="arm64"
+      else
+        NODE_ARCH="x64"
+      fi
       
-      # Disable interactive prompts
+      # Download and extract Node.js
+      echo "Downloading Node.js for ${NODE_ARCH}..."
+      curl -fsSL https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-${NODE_ARCH}.tar.gz -o node.tar.gz
+      mkdir -p $SNAPCRAFT_PART_INSTALL
+      tar -xzf node.tar.gz -C $SNAPCRAFT_PART_INSTALL --strip-components=1
+      rm node.tar.gz
+      
+      # Put node in PATH for the build
+      export PATH=$SNAPCRAFT_PART_INSTALL/bin:$PATH
+      
+      # Install pnpm
+      npm install -g pnpm@10.33.2
       export CI=true
       
       # Install dependencies and build
@@ -71,22 +87,11 @@ parts:
       pnpm build
       pnpm ui:build
       
-      # Clean up dev dependencies for smaller snap
+      # Clean up dev dependencies
       pnpm prune --prod
       
-      # Standard snapcraft build finish
-      snapcraftctl build
-
-    prime:
-      - openclaw.mjs
-      - package.json
-      - dist/
-      - extensions/
-      - node_modules/
-      - skills/
-      - bin/
-      - lib/
-      - usr/
+      # Copy required runtime files to the snap install dir
+      cp -a openclaw.mjs package.json dist extensions node_modules skills patches $SNAPCRAFT_PART_INSTALL/
 
   scripts:
     plugin: dump
