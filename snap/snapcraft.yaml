@@ -63,6 +63,9 @@ parts:
       # Install pnpm via npm since corepack might not be in the path during build
       npm install -g pnpm@10.33.2
       
+      # Disable interactive prompts
+      export CI=true
+      
       # Install dependencies and build
       pnpm install --frozen-lockfile
       pnpm build
