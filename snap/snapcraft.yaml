@@ -6,6 +6,14 @@ description: |
   It answers you on the channels you already use (WhatsApp, Telegram, Discord, etc.).
   The Gateway is the control plane — the product is the assistant.
 
+title: OpenClaw
+contact: hello@openclaw.ai
+license: MIT
+donation: https://github.com/sponsors/openclaw
+issues: https://github.com/openclaw/openclaw/issues
+source-code: https://github.com/openclaw/openclaw
+website: https://openclaw.ai
+
 grade: stable
 confinement: strict
 base: core24
@@ -89,6 +97,14 @@ parts:
       
       # Clean up dev dependencies
       pnpm prune --prod
+      
+      # Clean up foreign architecture binaries to fix Snapcraft lint warnings and save space
+      find node_modules -type d \( -name "*freebsd*" -o -name "*openbsd*" -o -name "*musl*" -o -name "*android*" -o -name "*ia32*" -o -name "*armhf*" -o -name "*loong*" -o -name "*riscv*" \) -prune -exec rm -rf {} +
+      if [ "$NODE_ARCH" = "x64" ]; then
+        find node_modules -type d \( -name "*arm64*" -o -name "*-arm" \) -prune -exec rm -rf {} +
+      else
+        find node_modules -type d -name "*x64*" -prune -exec rm -rf {} +
+      fi
       
       # Copy required runtime files to the snap install dir
       cp -a openclaw.mjs package.json dist extensions node_modules skills patches $SNAPCRAFT_PART_INSTALL/
