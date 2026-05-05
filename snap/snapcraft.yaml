@@ -45,9 +45,6 @@ layout:
     bind: $SNAP_DATA/etc
   /var/lib/openclaw:
     bind: $SNAP_DATA/var/lib
-  # Map the home-based config to the snap user data dir
-  $HOME/.openclaw:
-    bind: $SNAP_USER_DATA/.openclaw
 
 parts:
   openclaw:
