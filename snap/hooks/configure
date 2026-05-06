@@ -3,12 +3,12 @@
 # This script is triggered whenever the snap configuration is updated
 # (e.g., via 'snap set openclaw port=12345').
 
-# Get the configured port
+# Get the configured settings
 PORT=$(snapctl get port)
+BIND=$(snapctl get bind)
 
-if [ -n "$PORT" ]; then
-  # If the port has changed, restart the gateway service to apply the change
-  # Note: snapctl restart only works if the service is already running.
-  echo "Restarting OpenClaw Gateway to apply new port configuration: $PORT"
+if [ -n "$PORT" ] || [ -n "$BIND" ]; then
+  # If configuration has changed, restart the gateway service to apply the change
+  echo "Restarting OpenClaw Gateway to apply configuration changes (port: $PORT, bind: $BIND)"
   snapctl restart openclaw.gateway
 fi

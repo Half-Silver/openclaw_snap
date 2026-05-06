@@ -18,6 +18,12 @@ if [ -n "$PORT" ]; then
   export OPENCLAW_GATEWAY_PORT="$PORT"
 fi
 
+# Support for network binding via 'snap set openclaw bind=...' (loopback, lan)
+BIND=$(snapctl get bind)
+if [ -n "$BIND" ]; then
+  export OPENCLAW_GATEWAY_BIND="$BIND"
+fi
+
 # Ensure standard umask for file creation (drwxr-xr-x / -rw-r--r--)
 umask 0022
 
