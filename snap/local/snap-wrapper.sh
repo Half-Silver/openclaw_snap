@@ -18,9 +18,25 @@ if [ -n "$PORT" ]; then
   export OPENCLAW_GATEWAY_PORT="$PORT"
 fi
 
+# Ensure standard umask for file creation (drwxr-xr-x / -rw-r--r--)
+umask 0022
+
 # Ensure the state directory exists before starting the application
 if [ ! -d "$OPENCLAW_STATE_DIR" ]; then
   mkdir -p "$OPENCLAW_STATE_DIR"
+fi
+
+# Fix permissions if needed (e.g., due to previous sudo usage or bad umask)
+if [ -d "$OPENCLAW_STATE_DIR" ]; then
+  chmod u+rwX -R "$OPENCLAW_STATE_DIR" 2>/dev/null || true
+  if [ ! -w "$OPENCLAW_STATE_DIR" ]; then
+    echo "==========================================================================" >&2
+    echo "🚨 ERROR: Permission denied writing to $OPENCLAW_STATE_DIR." >&2
+    echo "If you previously ran openclaw with sudo, your files may be owned by root." >&2
+    echo "Please fix this by running the following command:" >&2
+    echo "  sudo chown -R \$USER:\$(id -gn) $OPENCLAW_STATE_DIR" >&2
+    echo "==========================================================================" >&2
+  fi
 fi
 
 # Execute the main entrypoint with the provided arguments
