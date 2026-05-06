@@ -24,6 +24,9 @@ if [ -n "$BIND" ]; then
   export OPENCLAW_GATEWAY_BIND="$BIND"
 fi
 
+# Log the configuration for debugging
+echo "Starting OpenClaw with: BIND=${OPENCLAW_GATEWAY_BIND:-loopback}, PORT=${OPENCLAW_GATEWAY_PORT:-18789}" >&2
+
 # Ensure standard umask for file creation (drwxr-xr-x / -rw-r--r--)
 umask 0022
 
