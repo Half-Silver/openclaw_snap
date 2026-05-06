@@ -7,11 +7,14 @@ config:
   bind: { required: false, type: "string", default: "lan" }
   remote-http-ui: { required: false, type: "bool", default: true }
 
+# Sidecar mode: ct-engine runs alongside the gateway/node daemons and only
+# sends status callbacks to the Control Tower. It does NOT launch the app.
 run:
-  command: "bin/snap-wrapper.sh gateway"
-  workdir: "$SNAP_DATA"
+  command: ""
 
 output:
   mode: "logs"
   interval: 5
-  event_name: "gateway_status"
+  initial_event: "message_initial"
+  periodic_event: "message"
+  stop_event: "deployment_stop"

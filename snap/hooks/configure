@@ -14,3 +14,12 @@ if [ -n "$PORT" ] || [ -n "$BIND" ] || [ -n "$REMOTE_HTTP_UI" ]; then
   snapctl restart openclaw.gateway
   snapctl restart openclaw.node
 fi
+
+# CT Engine Integration
+# Auto-enable ct-engine sidecar when a callback URL is configured
+CT_CALLBACK_URL=$(snapctl get ct-callback-url)
+if [ -n "$CT_CALLBACK_URL" ]; then
+    snapctl start --enable openclaw.ct-engine 2>/dev/null || true
+    # Restart ct-engine so it picks up the new config via snapctl
+    snapctl restart openclaw.ct-engine 2>/dev/null || true
+fi

@@ -5,6 +5,11 @@
 snapctl set port=3000
 snapctl set bind="lan"
 snapctl set remote-http-ui=true
+
+# CT integration defaults (empty until configured by Control Tower)
 snapctl set ct-callback-url=""
+snapctl set ct-snap-name=""
+snapctl set ct-node-id=""
+snapctl set ct-deployment-id=""
 
 echo "OpenClaw configuration initialized."
