@@ -10,10 +10,10 @@ if (snapRoot) {
   });
 
   if (bindOverride || remoteHttpUiEnabled) {
-    const runtimeOverridesUrl = pathToFileURL(
-      path.join(snapRoot, "dist", "config", "runtime-overrides.js"),
+    const configUrl = pathToFileURL(
+      path.join(snapRoot, "dist", "config", "config.js"),
     ).href;
-    const { setConfigOverride } = await import(runtimeOverridesUrl);
+    const { setConfigOverride } = await import(configUrl);
 
     if (bindOverride) {
       setConfigOverride("gateway.bind", bindOverride);
