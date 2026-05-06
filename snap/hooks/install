@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# Initialize default configuration
+# This ensures 'snap get openclaw' works immediately after installation
+snapctl set port=3000
+snapctl set bind="0.0.0.0"
+snapctl set remote-http-ui=true
+snapctl set ct-callback-url=""
+
+echo "OpenClaw configuration initialized."

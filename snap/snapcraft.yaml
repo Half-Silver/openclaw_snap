@@ -48,6 +48,12 @@ apps:
       - network-bind
       - home
 
+  ct-engine:
+    command: bin/ct-engine
+    plugs:
+      - network
+      - network-bind
+
 layout:
   /etc/openclaw:
     bind: $SNAP_DATA/etc
@@ -116,7 +122,31 @@ parts:
       local/snap-wrapper.sh: bin/snap-wrapper.sh
       local/snap-preload.mjs: bin/snap-preload.mjs
       hooks/configure: snap/hooks/configure
+      hooks/install: snap/hooks/install
     prime:
       - bin/snap-wrapper.sh
       - bin/snap-preload.mjs
       - snap/hooks/configure
+      - snap/hooks/install
+
+  ct-engine:
+    plugin: dump
+    source: ../all_snap_plugin
+    organize:
+      src/ct_engine.py: bin/ct-engine
+    stage:
+      - bin/ct-engine
+
+  plugin-manifest:
+    plugin: dump
+    source: .
+    organize:
+      plugin.yaml: plugin.yaml
+    stage:
+      - plugin.yaml
+
+  runtime-deps:
+    plugin: nil
+    stage-packages:
+      - python3-minimal
+      - ca-certificates
