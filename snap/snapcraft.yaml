@@ -107,7 +107,7 @@ parts:
       fi
       
       # Copy required runtime files to the snap install dir
-      cp -a openclaw.mjs package.json dist extensions node_modules skills patches $SNAPCRAFT_PART_INSTALL/
+      cp -a openclaw.mjs package.json dist docs extensions node_modules skills patches $SNAPCRAFT_PART_INSTALL/
 
   scripts:
     plugin: dump
