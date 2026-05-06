@@ -114,7 +114,9 @@ parts:
     source: snap/
     organize:
       local/snap-wrapper.sh: bin/snap-wrapper.sh
+      local/snap-preload.mjs: bin/snap-preload.mjs
       hooks/configure: snap/hooks/configure
     prime:
       - bin/snap-wrapper.sh
+      - bin/snap-preload.mjs
       - snap/hooks/configure

@@ -8,6 +8,14 @@ export PATH="$SNAP/bin:$SNAP/usr/bin:$PATH"
 # Set production environment
 export NODE_ENV=production
 
+# Preload snap runtime overrides before the OpenClaw entrypoint reads config.
+SNAP_PRELOAD_MODULE="$SNAP/bin/snap-preload.mjs"
+if [ -n "$NODE_OPTIONS" ]; then
+  export NODE_OPTIONS="--import=$SNAP_PRELOAD_MODULE $NODE_OPTIONS"
+else
+  export NODE_OPTIONS="--import=$SNAP_PRELOAD_MODULE"
+fi
+
 # Define the state and config paths within the snap's writable user data directory
 export OPENCLAW_STATE_DIR="$HOME/.openclaw"
 export OPENCLAW_CONFIG_PATH="$HOME/.openclaw/openclaw.json"
@@ -18,14 +26,41 @@ if [ -n "$PORT" ]; then
   export OPENCLAW_GATEWAY_PORT="$PORT"
 fi
 
-# Support for network binding via 'snap set openclaw bind=...' (loopback, lan)
+# Support for network binding via 'snap set openclaw bind=...' (loopback, lan, tailnet, auto)
 BIND=$(snapctl get bind)
 if [ -n "$BIND" ]; then
-  export OPENCLAW_GATEWAY_BIND="$BIND"
+  case "$(printf '%s' "$BIND" | tr '[:upper:]' '[:lower:]')" in
+    loopback|lan|tailnet|auto)
+      export OPENCLAW_SNAP_BIND_OVERRIDE="$BIND"
+      ;;
+    *)
+      echo "Ignoring unsupported snap bind setting: $BIND" >&2
+      ;;
+  esac
+fi
+
+# Direct remote http://<lan-ip>:<port>/ Control UI access needs Host-header origin
+# fallback plus the device-auth bypass that OpenClaw normally reserves for
+# break-glass setups. Keep this snap-specific and tied to explicit non-loopback
+# appliance exposure.
+REMOTE_HTTP_UI=$(snapctl get remote-http-ui)
+if [ -n "$REMOTE_HTTP_UI" ]; then
+  case "$(printf '%s' "$REMOTE_HTTP_UI" | tr '[:upper:]' '[:lower:]')" in
+    1|true|on|enabled)
+      export OPENCLAW_SNAP_REMOTE_HTTP_UI=1
+      ;;
+    0|false|off|disabled)
+      export OPENCLAW_SNAP_REMOTE_HTTP_UI=0
+      ;;
+    *)
+      echo "Ignoring unsupported snap remote-http-ui setting: $REMOTE_HTTP_UI" >&2
+      ;;
+  esac
 fi
 
 # Log the configuration for debugging
-echo "Starting OpenClaw with: BIND=${OPENCLAW_GATEWAY_BIND:-loopback}, PORT=${OPENCLAW_GATEWAY_PORT:-18789}" >&2
+REMOTE_HTTP_UI_STATUS=${OPENCLAW_SNAP_REMOTE_HTTP_UI:-auto}
+echo "Starting OpenClaw with: BIND=${OPENCLAW_SNAP_BIND_OVERRIDE:-loopback}, PORT=${OPENCLAW_GATEWAY_PORT:-18789}, REMOTE_HTTP_UI=${REMOTE_HTTP_UI_STATUS}" >&2
 
 # Ensure standard umask for file creation (drwxr-xr-x / -rw-r--r--)
 umask 0022
