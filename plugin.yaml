@@ -26,11 +26,18 @@ config:
   brave-api-key: { required: false, type: "string", description: "Brave Search API Key" }
   perplexity-api-key: { required: false, type: "string", description: "Perplexity API Key" }
 
-# Sidecar mode: engine reports status only
+# Sidecar mode: engine reports status (including security token)
 run:
   command: ""
 
+sidecar:
+  status_command: |
+    IP=$(hostname -I | awk '{print $1}')
+    TOKEN=$(cat /var/snap/all-dev-openclaw/common/.openclaw/gateway.token 2>/dev/null || echo "generating...")
+    echo "dashboard: http://$IP:3000?token=$TOKEN"
+
 output:
+
   mode: "logs"
   interval: 0  # Startup only
   initial_event: "message_initial"
