@@ -45,16 +45,31 @@ output:
 3. **Status Reporting**: The `ct-engine` runs the `sidecar.status_command`, reads the token, and sends the **authenticated login link** to the Control Tower.
 4. **One-Click Access**: The user sees the link in their Control Tower UI and can log in immediately.
 
-## 🛠️ Control Tower JSON Reference
+## 📋 Configuration Template (CT Deployment Payload)
+
+Use this JSON structure for the deployment request from the Control Tower.
 
 ```json
 {
-  "name": "all-dev-openclaw",
-  "type": "sidecar",
-  "config": {
-    "port": 3000,
-    "model": "openrouter/auto",
-    "ct-callback-url": "http://<ct-ip>:8080/callback"
-  }
+  "snaps": [
+    {
+      "name": "all-dev-openclaw",
+      "refresh": true
+    }
+  ],
+  "snap_config": [
+    {
+      "snap": "all-dev-openclaw",
+      "settings": {
+        "port": 3000,
+        "model": "openrouter/auto",
+        "openrouter-api-key": "<OPENROUTER_API_KEY>",
+        "ct-node-id": "<ALL_APP_NODE_ID>",
+        "ct-callback-url": "<ALL_APP_CALLBACK_URL>",
+        "ct-deployment-id": "<ALL_APP_DEPLOYMENT_ID>"
+      }
+    }
+  ]
 }
 ```
+
