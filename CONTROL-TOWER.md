@@ -1,53 +1,60 @@
 # Control Tower Integration — all-dev-openclaw
 
-This document defines the input schema and configuration required for the **ALL Control Tower** to manage this snap.
+This snap uses the **ALL Universal Snap Engine (`ct-engine`)** for seamless Control Tower integration. All app-specific behavior is defined in the `plugin.yaml` manifest.
 
-## 📄 Snap Manifest (JSON)
+## 🏗️ Architecture
 
-Use this JSON when registering the snap in the Control Tower dashboard.
+```text
+all-dev-openclaw:
+├── ct-engine          ← universal integration engine
+├── plugin.yaml        ← OpenClaw-specific manifest
+└── openclaw (mjs)     ← the actual gateway & node
+```
+
+## 📄 The Manifest (`plugin.yaml`)
+
+This definition allows the `ct-engine` to manage OpenClaw's security tokens and dashboard access.
+
+```yaml
+app:
+  name: "all-dev-openclaw"
+  version: "2026.5.7"
+
+config:
+  port: { required: false, type: "int", default: 3000 }
+  bind: { required: false, type: "string", default: "lan" }
+  model: { required: false, type: "string", default: "openrouter/auto" }
+
+sidecar:
+  # Reports the dashboard link with the auto-generated security token
+  status_command: |
+    IP=$(hostname -I | awk '{print $1}')
+    TOKEN=$(cat /var/snap/all-dev-openclaw/common/.openclaw/gateway.token)
+    echo "dashboard: http://$IP:3000?token=$TOKEN"
+
+output:
+  mode: "logs"
+  interval: 0
+  initial_event: "message_initial"
+```
+
+## 📡 How it works
+
+1. **Deployment**: Control Tower configures the snap via `snap set`.
+2. **Token Generation**: OpenClaw starts and generates a `gateway.token`.
+3. **Status Reporting**: The `ct-engine` runs the `sidecar.status_command`, reads the token, and sends the **authenticated login link** to the Control Tower.
+4. **One-Click Access**: The user sees the link in their Control Tower UI and can log in immediately.
+
+## 🛠️ Control Tower JSON Reference
 
 ```json
 {
   "name": "all-dev-openclaw",
-  "version": "2026.5.7",
   "type": "sidecar",
   "config": {
     "port": 3000,
-    "bind": "lan",
     "model": "openrouter/auto",
-    "openrouter-api-key": "",
-    "openai-api-key": "",
     "ct-callback-url": "http://<ct-ip>:8080/callback"
-  },
-  "output": {
-    "mode": "logs",
-    "interval": 0,
-    "initial_event": "message_initial",
-    "stop_event": "deployment_stop"
   }
 }
 ```
-
-## 🛠️ Input Schema (Configuration)
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `port` | `int` | Gateway port (Default: `3000`) |
-| `bind` | `string` | Network binding (Default: `lan`) |
-| `model` | `string` | Primary AI model (e.g., `openrouter/auto`) |
-| `openrouter-api-key` | `string` | OpenRouter API Key |
-| `openai-api-key` | `string` | OpenAI API Key |
-| `ct-callback-url` | `string` | The Control Tower callback URL for status reporting |
-
-## 📡 Status Reporting (Sidecar)
-
-OpenClaw reports its status via periodic callbacks to the `ct-callback-url`.
-
-### Automated Dashboard Login
-Upon startup, OpenClaw sends a `message_initial` event containing a **tokenized dashboard link**:
-- `http://<ip>:3000?token=xxxxxxx`
-
-This allows you to open the dashboard directly from your Control Tower messages without manually retrieving the security token.
-
-### Shutdown
-Upon stopping, OpenClaw sends a `deployment_stop` event to notify the Control Tower of graceful closure.
