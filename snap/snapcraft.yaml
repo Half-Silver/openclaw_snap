@@ -106,7 +106,7 @@ parts:
       pnpm ui:build
       
       # Clean up dev dependencies
-      pnpm prune --prod --node-linker=hoisted
+      pnpm prune --prod
       
       # Clean up foreign architecture binaries to fix Snapcraft lint warnings and save space
       find node_modules -type d \( -name "*freebsd*" -o -name "*openbsd*" -o -name "*musl*" -o -name "*android*" -o -name "*ia32*" -o -name "*armhf*" -o -name "*loong*" -o -name "*riscv*" \) -prune -exec rm -rf {} +
