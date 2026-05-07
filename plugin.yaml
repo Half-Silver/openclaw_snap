@@ -7,10 +7,18 @@ app:
   version: "2026.5.7"
 
 config:
+  # --- Services ---
+  gateway-service: { required: false, type: "string", default: "enabled" }
+  node-service: { required: false, type: "string", default: "enabled" }
+
   # --- Network ---
   port: { required: false, type: "int", default: 3000 }
   bind: { required: false, type: "string", default: "lan" }
   remote-http-ui: { required: false, type: "bool", default: true }
+
+  # --- Core ---
+  model: { required: false, type: "string", default: "openrouter/auto" }
+
 
   # --- AI Keys ---
   openrouter-api-key: { required: false, type: "string", description: "OpenRouter API Key" }

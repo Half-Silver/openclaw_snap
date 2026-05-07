@@ -7,9 +7,13 @@ mkdir -p "$CONFIG_DIR"
 chmod 777 "$CONFIG_DIR" 2>/dev/null || true
 
 # Initialize default configuration
+snapctl set gateway-service="enabled"
+snapctl set node-service="enabled"
+snapctl set model="openrouter/auto"
 snapctl set port=3000
 snapctl set bind="lan"
 snapctl set remote-http-ui=true
+snapctl set log-level="info"
 
 # CT integration defaults
 snapctl set ct-callback-url=""
@@ -22,4 +26,3 @@ echo "Shared config:  $SNAP_COMMON/.openclaw/"
 echo "Dashboard:      http://<device-ip>:3000"
 echo "Get Token:      all-dev-openclaw.get-token"
 echo "Configure via:  sudo snap set all-dev-openclaw openai-api-key=..."
-

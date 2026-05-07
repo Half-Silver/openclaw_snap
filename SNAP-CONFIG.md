@@ -8,6 +8,12 @@ After installing the snap, retrieve your security token to unlock the dashboard:
 all-dev-openclaw.get-token
 ```
 
+## 🛠️ Services
+| Key | Default | Description |
+|-----|---------|-------------|
+| `gateway-service` | `enabled` | Enable/Disable the Gateway daemon (`enabled`, `disabled`) |
+| `node-service` | `enabled` | Enable/Disable the Node (engine) daemon (`enabled`, `disabled`) |
+
 ## 🌐 Network & UI
 | Key | Default | Description |
 |-----|---------|-------------|
@@ -15,7 +21,13 @@ all-dev-openclaw.get-token
 | `bind` | `lan` | Network binding (`loopback`, `lan`, `auto`) |
 | `remote-http-ui` | `true` | Allow access to UI from other devices on the network |
 
+## 🧠 Core
+| Key | Default | Description |
+|-----|---------|-------------|
+| `model` | `openrouter/auto` | Primary AI model to use for chat |
+
 ## 🤖 AI Providers (LLMs)
+
 | Key | Env Var | Description |
 |-----|---------|-------------|
 | `openai-api-key` | `OPENAI_API_KEY` | OpenAI API Key |

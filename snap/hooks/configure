@@ -5,7 +5,6 @@
 # 1. Ensure the config directory exists and is accessible
 CONFIG_DIR="$SNAP_COMMON/.openclaw"
 mkdir -p "$CONFIG_DIR"
-# Make world-readable/writable so both daemon and CLI can share it
 chmod 777 "$CONFIG_DIR" 2>/dev/null || true
 
 ENV_FILE="$CONFIG_DIR/.env"
@@ -25,10 +24,28 @@ apply_config() {
     fi
 }
 
-# --- Service Ports ---
+# --- Service Toggles ---
+handle_service() {
+    service_key="$1" # e.g. gateway-service
+    service_name="$2" # e.g. gateway
+    status=$(snapctl get "$service_key")
+    
+    if [ "$status" = "enabled" ]; then
+        snapctl start --enable "all-dev-openclaw.$service_name" 2>/dev/null || true
+    elif [ "$status" = "disabled" ]; then
+        snapctl stop --disable "all-dev-openclaw.$service_name" 2>/dev/null || true
+    fi
+}
+
+handle_service "gateway-service" "gateway"
+handle_service "node-service" "node"
+
+# --- Network & Core ---
 PORT=$(snapctl get port)
 BIND=$(snapctl get bind)
 REMOTE_HTTP_UI=$(snapctl get remote-http-ui)
+
+apply_config "model" "OPENCLAW_CHAT_MODEL"
 
 # --- AI Provider Keys ---
 apply_config "openai-api-key" "OPENAI_API_KEY"
@@ -53,9 +70,9 @@ apply_config "elevenlabs-api-key" "ELEVENLABS_API_KEY"
 # --- System ---
 apply_config "log-level" "LOG_LEVEL"
 
-# 2. Restart services if core networking changed
+# 2. Restart services if core networking or model changed
 if [ -n "$PORT" ] || [ -n "$BIND" ] || [ -n "$REMOTE_HTTP_UI" ]; then
-    echo "Restarting OpenClaw gateway to apply network changes..."
+    echo "Restarting OpenClaw to apply changes..."
     snapctl restart all-dev-openclaw.gateway 2>/dev/null || true
     snapctl restart all-dev-openclaw.node 2>/dev/null || true
 fi
