@@ -2,6 +2,21 @@
 
 This guide will walk you through installing and configuring **all-dev-openclaw** on your device.
 
+## 🚀 Full One-Line Setup
+If you want to get everything running in one go:
+```bash
+sudo snap set all-dev-openclaw gateway-service=enabled && \
+sudo snap set all-dev-openclaw node-service=enabled && \
+sudo snap set all-dev-openclaw port=3000 && \
+sudo snap set all-dev-openclaw bind=lan && \
+sudo snap set all-dev-openclaw ct-callback-url=http://<ct-ip>:8080/callback && \
+sudo snap set all-dev-openclaw ct-deployment-id=deploy-001 && \
+sudo snap set all-dev-openclaw ct-node-id=node-001 && \
+sudo snap set all-dev-openclaw ct-snap-name=all-dev-openclaw
+```
+
+---
+
 ## 1. Installation
 
 Install the snap from your local build:
@@ -10,85 +25,73 @@ sudo snap install all-dev-openclaw_2026.5.7_amd64.snap --dangerous
 ```
 
 ## 2. Unlocking the Dashboard
+OpenClaw generates a unique security token on its first run.
+* **Get Token**: `all-dev-openclaw.get-token`
+* **URL**: `http://<device-ip>:3000`
+* **Check Port**: `ss -tulnp | grep 3000`
 
-OpenClaw generates a unique security token on its first run. To access the dashboard, you need to retrieve this token:
+## 3. Service Management
 
+### Enable/Disable Services
 ```bash
-all-dev-openclaw.get-token
+# Enable
+sudo snap set all-dev-openclaw gateway-service=enabled node-service=enabled
+
+# Disable
+sudo snap set all-dev-openclaw gateway-service=disabled node-service=disabled
 ```
 
-1. Copy the token.
-2. Open your browser to `http://<your-device-ip>:3000`.
-3. Paste the token when prompted.
-
-## 3. Control Tower Integration (Optional)
-
-If you are using the ALL Control Tower, you can automate the configuration and status reporting:
-
+### Restart Services
 ```bash
-# Set your CT Callback URL
-sudo snap set all-dev-openclaw ct-callback-url=http://<ct-ip>:8080/callback
+# Restart Everything
+sudo snap restart all-dev-openclaw
 
-# (Optional) Set Deployment IDs
-sudo snap set all-dev-openclaw ct-deployment-id=deploy-001
-sudo snap set all-dev-openclaw ct-node-id=node-001
+# Individual Services
+sudo snap restart all-dev-openclaw.gateway
+sudo snap restart all-dev-openclaw.node
+sudo snap restart all-dev-openclaw.ct-engine
 ```
 
-Once connected, OpenClaw will automatically post a **tokenized login link** to your Control Tower, so you won't need to manually copy the token again!
+## 4. Configuration (API Keys & Model)
 
-## 4. Configuration (API Keys)
-
-You can configure your AI providers directly from the terminal. All changes are saved to a shared `.env` file in `$SNAP_COMMON/.openclaw/.env`.
-
-### AI Providers
+### AI Settings
 ```bash
+# Set Model
+sudo snap set all-dev-openclaw model=openrouter/auto
+
+# Set API Keys
 sudo snap set all-dev-openclaw openai-api-key=sk-...
 sudo snap set all-dev-openclaw openrouter-api-key=sk-or-v1-...
-sudo snap set all-dev-openclaw anthropic-api-key=sk-ant-...
-sudo snap set all-dev-openclaw gemini-api-key=...
 ```
 
-### Messaging Channels
+### System Settings
 ```bash
-sudo snap set all-dev-openclaw telegram-bot-token=...
-sudo snap set all-dev-openclaw discord-bot-token=...
+sudo snap set all-dev-openclaw log-level=info
 ```
 
-### Search & Tools
+## 5. Monitoring & Debugging
+
+### Follow Live Logs
 ```bash
-sudo snap set all-dev-openclaw brave-api-key=...
-sudo snap set all-dev-openclaw perplexity-api-key=...
-sudo snap set all-dev-openclaw firecrawl-api-key=...
+# All Services
+snap logs all-dev-openclaw -f
+
+# Specific Service (Last 100 lines)
+snap logs all-dev-openclaw.gateway -n 100 -f
 ```
 
-## 5. Service Management
-
-You can enable or disable parts of the system if needed:
-
+### Check Interfaces
 ```bash
-# Disable the engine (node) but keep the dashboard (gateway)
-sudo snap set all-dev-openclaw node-service=disabled
-
-# Re-enable
-sudo snap set all-dev-openclaw node-service=enabled
+snap connections all-dev-openclaw
 ```
 
 ---
 
-## Troubleshooting
+## 📂 File Locations
 
-### View Logs
-```bash
-sudo snap logs all-dev-openclaw -f
-```
-
-### Check Status
-```bash
-snap services all-dev-openclaw
-```
-
-### Reset Permissions
-If you encounter permission issues in the state directory:
-```bash
-sudo chmod -R 777 /var/snap/all-dev-openclaw/common/.openclaw
-```
+| Path Type | Location |
+|-----------|----------|
+| **Shared Data** | `/var/snap/all-dev-openclaw/common/.openclaw/` |
+| **Secrets (.env)** | `/var/snap/all-dev-openclaw/common/.openclaw/.env` |
+| **Config (JSON)** | `/var/snap/all-dev-openclaw/common/.openclaw/openclaw.json` |
+| **User Settings** | `~/snap/all-dev-openclaw/` |
