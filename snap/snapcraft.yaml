@@ -48,7 +48,14 @@ apps:
       - network-bind
       - home
 
+  get-token:
+    command: bin/snap-wrapper.sh get-token
+    plugs:
+      - network
+      - home
+
   ct-engine:
+
     command: bin/ct-engine run
     daemon: simple
     install-mode: disable

@@ -20,4 +20,6 @@ snapctl set ct-deployment-id=""
 echo "OpenClaw (ALL Edition) installed successfully."
 echo "Shared config:  $SNAP_COMMON/.openclaw/"
 echo "Dashboard:      http://<device-ip>:3000"
+echo "Get Token:      all-dev-openclaw.get-token"
 echo "Configure via:  sudo snap set all-dev-openclaw openai-api-key=..."
+

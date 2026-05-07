@@ -83,12 +83,21 @@ if [ -d "$OPENCLAW_STATE_DIR" ]; then
   fi
 fi
 
-# Execute the main entrypoint with the provided arguments
-# But first, automatically inject the gateway token if it exists so the CLI
-# and the Node service can connect to the local gateway daemon without prompting.
-TOKEN_FILE="$OPENCLAW_STATE_DIR/gateway.token"
-if [ -z "$OPENCLAW_GATEWAY_TOKEN" ] && [ -f "$TOKEN_FILE" ]; then
-  export OPENCLAW_GATEWAY_TOKEN=$(cat "$TOKEN_FILE")
+# Handle special commands
+if [ "$1" = "get-token" ]; then
+  if [ -f "$TOKEN_FILE" ]; then
+    echo "=========================================================================="
+    echo "🔑 OpenClaw Gateway Token:"
+    cat "$TOKEN_FILE"
+    echo ""
+    echo "Paste this token into the Dashboard at http://localhost:3000"
+    echo "=========================================================================="
+  else
+    echo "❌ Token file not found at $TOKEN_FILE."
+    echo "Is the gateway running? Try starting it first."
+  fi
+  exit 0
 fi
 
 exec "$SNAP/bin/node" "$SNAP/openclaw.mjs" "$@"
+
