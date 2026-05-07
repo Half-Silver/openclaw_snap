@@ -16,17 +16,18 @@ else
   export NODE_OPTIONS="--import=$SNAP_PRELOAD_MODULE"
 fi
 
-# Define the state and config paths within the snap's writable user data directory
-export OPENCLAW_STATE_DIR="$HOME/.openclaw"
-export OPENCLAW_CONFIG_PATH="$HOME/.openclaw/openclaw.json"
+# Define the state and config paths within the snap's shared common directory
+# This allows both the daemon (root) and the CLI (user) to share the same config.
+export OPENCLAW_STATE_DIR="$SNAP_COMMON/.openclaw"
+export OPENCLAW_CONFIG_PATH="$SNAP_COMMON/.openclaw/openclaw.json"
 
-# Support for dynamic port configuration via 'snap set openclaw port=...'
+# Support for dynamic port configuration via 'snap set all-dev-openclaw port=...'
 PORT=$(snapctl get port)
 if [ -n "$PORT" ]; then
   export OPENCLAW_GATEWAY_PORT="$PORT"
 fi
 
-# Support for network binding via 'snap set openclaw bind=...' (loopback, lan, tailnet, auto)
+# Support for network binding via 'snap set all-dev-openclaw bind=...' (loopback, lan, tailnet, auto)
 BIND=$(snapctl get bind)
 if [ -n "$BIND" ]; then
   case "$(printf '%s' "$BIND" | tr '[:upper:]' '[:lower:]')" in
@@ -70,15 +71,14 @@ if [ ! -d "$OPENCLAW_STATE_DIR" ]; then
   mkdir -p "$OPENCLAW_STATE_DIR"
 fi
 
-# Fix permissions if needed (e.g., due to previous sudo usage or bad umask)
+# Fix permissions if needed
 if [ -d "$OPENCLAW_STATE_DIR" ]; then
   chmod u+rwX -R "$OPENCLAW_STATE_DIR" 2>/dev/null || true
   if [ ! -w "$OPENCLAW_STATE_DIR" ]; then
     echo "==========================================================================" >&2
     echo "🚨 ERROR: Permission denied writing to $OPENCLAW_STATE_DIR." >&2
-    echo "If you previously ran openclaw with sudo, your files may be owned by root." >&2
     echo "Please fix this by running the following command:" >&2
-    echo "  sudo chown -R \$USER:\$(id -gn) $OPENCLAW_STATE_DIR" >&2
+    echo "  sudo chmod -R 777 $OPENCLAW_STATE_DIR" >&2
     echo "==========================================================================" >&2
   fi
 fi

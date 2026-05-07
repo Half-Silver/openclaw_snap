@@ -1,15 +1,23 @@
 #!/bin/sh
+# OpenClaw Snap Install Hook
+
+# Create shared config directory immediately
+CONFIG_DIR="$SNAP_COMMON/.openclaw"
+mkdir -p "$CONFIG_DIR"
+chmod 777 "$CONFIG_DIR" 2>/dev/null || true
 
 # Initialize default configuration
-# This ensures 'snap get openclaw' works immediately after installation
 snapctl set port=3000
 snapctl set bind="lan"
 snapctl set remote-http-ui=true
 
-# CT integration defaults (empty until configured by Control Tower)
+# CT integration defaults
 snapctl set ct-callback-url=""
-snapctl set ct-snap-name=""
+snapctl set ct-snap-name="all-dev-openclaw"
 snapctl set ct-node-id=""
 snapctl set ct-deployment-id=""
 
-echo "OpenClaw configuration initialized."
+echo "OpenClaw (ALL Edition) installed successfully."
+echo "Shared config:  $SNAP_COMMON/.openclaw/"
+echo "Dashboard:      http://<device-ip>:3000"
+echo "Configure via:  sudo snap set all-dev-openclaw openai-api-key=..."

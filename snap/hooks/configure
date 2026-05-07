@@ -1,25 +1,70 @@
 #!/bin/sh -e
 # OpenClaw Snap Configuration Hook
-# This script is triggered whenever the snap configuration is updated
-# (e.g., via 'snap set openclaw port=12345').
+# Bridging 'snap set' to the internal .env configuration.
 
-# Get the configured settings
+# 1. Ensure the config directory exists and is accessible
+CONFIG_DIR="$SNAP_COMMON/.openclaw"
+mkdir -p "$CONFIG_DIR"
+# Make world-readable/writable so both daemon and CLI can share it
+chmod 777 "$CONFIG_DIR" 2>/dev/null || true
+
+ENV_FILE="$CONFIG_DIR/.env"
+touch "$ENV_FILE"
+chmod 644 "$ENV_FILE" 2>/dev/null || true
+
+# Helper to apply snap config to .env
+apply_config() {
+    snap_key="$1"
+    env_key="$2"
+    value=$(snapctl get "$snap_key")
+    
+    if [ -n "$value" ]; then
+        # Remove existing entry and append new one
+        sed -i "/^${env_key}=/d" "$ENV_FILE"
+        echo "${env_key}=${value}" >> "$ENV_FILE"
+    fi
+}
+
+# --- Service Ports ---
 PORT=$(snapctl get port)
 BIND=$(snapctl get bind)
 REMOTE_HTTP_UI=$(snapctl get remote-http-ui)
 
+# --- AI Provider Keys ---
+apply_config "openai-api-key" "OPENAI_API_KEY"
+apply_config "anthropic-api-key" "ANTHROPIC_API_KEY"
+apply_config "gemini-api-key" "GEMINI_API_KEY"
+apply_config "openrouter-api-key" "OPENROUTER_API_KEY"
+
+# --- Messaging Channels ---
+apply_config "telegram-bot-token" "TELEGRAM_BOT_TOKEN"
+apply_config "discord-bot-token" "DISCORD_BOT_TOKEN"
+apply_config "slack-bot-token" "SLACK_BOT_TOKEN"
+apply_config "slack-app-token" "SLACK_APP_TOKEN"
+
+# --- Tools & Search ---
+apply_config "brave-api-key" "BRAVE_API_KEY"
+apply_config "perplexity-api-key" "PERPLEXITY_API_KEY"
+apply_config "firecrawl-api-key" "FIRECRAWL_API_KEY"
+
+# --- Voice ---
+apply_config "elevenlabs-api-key" "ELEVENLABS_API_KEY"
+
+# --- System ---
+apply_config "log-level" "LOG_LEVEL"
+
+# 2. Restart services if core networking changed
 if [ -n "$PORT" ] || [ -n "$BIND" ] || [ -n "$REMOTE_HTTP_UI" ]; then
-  # If configuration has changed, restart the gateway service to apply the change
-  echo "Restarting OpenClaw services to apply configuration changes (port: $PORT, bind: $BIND, remote-http-ui: $REMOTE_HTTP_UI)"
-  snapctl restart openclaw.gateway
-  snapctl restart openclaw.node
+    echo "Restarting OpenClaw gateway to apply network changes..."
+    snapctl restart all-dev-openclaw.gateway 2>/dev/null || true
+    snapctl restart all-dev-openclaw.node 2>/dev/null || true
 fi
 
-# CT Engine Integration
-# Auto-enable ct-engine sidecar when a callback URL is configured
+# 3. CT Engine Integration
 CT_CALLBACK_URL=$(snapctl get ct-callback-url)
 if [ -n "$CT_CALLBACK_URL" ]; then
-    snapctl start --enable openclaw.ct-engine 2>/dev/null || true
-    # Restart ct-engine so it picks up the new config via snapctl
-    snapctl restart openclaw.ct-engine 2>/dev/null || true
+    snapctl start --enable all-dev-openclaw.ct-engine 2>/dev/null || true
+    snapctl restart all-dev-openclaw.ct-engine 2>/dev/null || true
+else
+    snapctl stop --disable all-dev-openclaw.ct-engine 2>/dev/null || true
 fi

@@ -1,12 +1,12 @@
-name: openclaw
-version: '2026.4.30'
+name: all-dev-openclaw
+version: '2026.5.7'
 summary: Personal AI Assistant - Multi-channel AI gateway
 description: |
   OpenClaw is a personal AI assistant you run on your own devices.
   It answers you on the channels you already use (WhatsApp, Telegram, Discord, etc.).
   The Gateway is the control plane — the product is the assistant.
 
-title: OpenClaw
+title: OpenClaw (ALL Edition)
 contact: hello@openclaw.ai
 license: MIT
 donation: https://github.com/sponsors/openclaw
@@ -56,6 +56,7 @@ apps:
       - network
       - network-bind
 
+
 layout:
   /etc/openclaw:
     bind: $SNAP_DATA/etc
@@ -99,12 +100,13 @@ parts:
       export CI=true
       
       # Install dependencies and build
-      pnpm install --frozen-lockfile
+      # Use hoisted linker to avoid external symlinks to the pnpm store
+      pnpm install --frozen-lockfile --node-linker=hoisted
       pnpm build
       pnpm ui:build
       
       # Clean up dev dependencies
-      pnpm prune --prod
+      pnpm prune --prod --node-linker=hoisted
       
       # Clean up foreign architecture binaries to fix Snapcraft lint warnings and save space
       find node_modules -type d \( -name "*freebsd*" -o -name "*openbsd*" -o -name "*musl*" -o -name "*android*" -o -name "*ia32*" -o -name "*armhf*" -o -name "*loong*" -o -name "*riscv*" \) -prune -exec rm -rf {} +

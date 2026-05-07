@@ -1,20 +1,37 @@
+# plugin.yaml — OpenClaw snap manifest for CT Engine
+#
+# OpenClaw uses the CT Engine in SIDECAR MODE.
+
 app:
-  name: "openclaw"
-  version: "2026.4.30"
+  name: "all-dev-openclaw"
+  version: "2026.5.7"
 
 config:
+  # --- Network ---
   port: { required: false, type: "int", default: 3000 }
   bind: { required: false, type: "string", default: "lan" }
   remote-http-ui: { required: false, type: "bool", default: true }
 
-# Sidecar mode: ct-engine runs alongside the gateway/node daemons and only
-# sends status callbacks to the Control Tower. It does NOT launch the app.
+  # --- AI Keys ---
+  openrouter-api-key: { required: false, type: "string", description: "OpenRouter API Key" }
+  openai-api-key: { required: false, type: "string", description: "OpenAI API Key" }
+  anthropic-api-key: { required: false, type: "string", description: "Anthropic API Key" }
+  gemini-api-key: { required: false, type: "string", description: "Google Gemini API Key" }
+
+  # --- Channels ---
+  telegram-bot-token: { required: false, type: "string", description: "Telegram Bot Token" }
+  discord-bot-token: { required: false, type: "string", description: "Discord Bot Token" }
+
+  # --- Search ---
+  brave-api-key: { required: false, type: "string", description: "Brave Search API Key" }
+  perplexity-api-key: { required: false, type: "string", description: "Perplexity API Key" }
+
+# Sidecar mode: engine reports status only
 run:
   command: ""
 
 output:
   mode: "logs"
-  interval: 5
+  interval: 0  # Startup only
   initial_event: "message_initial"
-  periodic_event: "message"
   stop_event: "deployment_stop"
