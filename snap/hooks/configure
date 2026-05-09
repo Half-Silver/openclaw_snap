@@ -103,7 +103,40 @@ PORT=$(snapctl get port)
 BIND=$(snapctl get bind)
 REMOTE_HTTP_UI=$(snapctl get remote-http-ui)
 
-apply_config "model" "OPENCLAW_CHAT_MODEL"
+# Update model in openclaw.json
+python3 << 'EOF'
+import os, json, subprocess
+
+config_dir = os.environ.get('SNAP_COMMON') + '/.openclaw'
+openclaw_json_path = os.path.join(config_dir, 'openclaw.json')
+
+try:
+    res = subprocess.run(['snapctl', 'get', 'model'], capture_output=True, text=True)
+    model = res.stdout.strip()
+except:
+    model = ''
+
+if model:
+    data = {}
+    if os.path.exists(openclaw_json_path):
+        try:
+            with open(openclaw_json_path) as f:
+                data = json.load(f)
+        except:
+            pass
+            
+    if 'agents' not in data:
+        data['agents'] = {}
+    if 'defaults' not in data['agents']:
+        data['agents']['defaults'] = {}
+    if 'model' not in data['agents']['defaults']:
+        data['agents']['defaults']['model'] = {}
+        
+    data['agents']['defaults']['model']['primary'] = model
+    
+    with open(openclaw_json_path, 'w') as f:
+        json.dump(data, f, indent=2)
+EOF
 
 # --- AI Provider Keys ---
 apply_config "openai-api-key" "OPENAI_API_KEY"
