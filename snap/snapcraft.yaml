@@ -90,10 +90,11 @@ parts:
       
       # Download and extract Node.js
       echo "Downloading Node.js for ${NODE_ARCH}..."
-      curl -fsSL https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-${NODE_ARCH}.tar.gz -o node.tar.gz
+      curl -fsSL https://nodejs.org/dist/v22.18.0/node-v22.18.0-linux-${NODE_ARCH}.tar.gz -o node.tar.gz
       mkdir -p $SNAPCRAFT_PART_INSTALL
       tar -xzf node.tar.gz -C $SNAPCRAFT_PART_INSTALL --strip-components=1
       rm node.tar.gz
+
       
       # Put node in PATH for the build
       export PATH=$SNAPCRAFT_PART_INSTALL/bin:$PATH
