@@ -123,5 +123,12 @@ if [ "$1" = "get-token" ]; then
 fi
 
 
+# Intercept 'node run' to pass the correct gateway port directly
+if [ "$1" = "node" ] && [ "$2" = "run" ]; then
+  shift 2
+  exec "$SNAP/bin/node" "$SNAP/openclaw.mjs" node run --port "$OPENCLAW_GATEWAY_PORT" "$@"
+fi
+
 exec "$SNAP/bin/node" "$SNAP/openclaw.mjs" "$@"
+
 
