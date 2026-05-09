@@ -27,9 +27,12 @@ export OPENCLAW_CONFIG_PATH="$SNAP_COMMON/.openclaw/openclaw.json"
 
 # Support for dynamic port configuration via 'snap set all-dev-openclaw port=...'
 PORT=$(snapctl get port)
-if [ -n "$PORT" ]; then
-  export OPENCLAW_GATEWAY_PORT="$PORT"
+if [ -z "$PORT" ]; then
+  PORT=3000
 fi
+export OPENCLAW_GATEWAY_PORT="$PORT"
+export OPENCLAW_GATEWAY_URL="ws://127.0.0.1:$PORT"
+
 
 # Support for network binding via 'snap set all-dev-openclaw bind=...' (loopback, lan, tailnet, auto)
 BIND=$(snapctl get bind)
