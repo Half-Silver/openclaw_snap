@@ -45,6 +45,7 @@ sidecar:
 output:
 
   mode: "logs"
-  interval: 0  # Startup only
+  interval: 0
+
   initial_event: "message_initial"
   stop_event: "deployment_stop"
