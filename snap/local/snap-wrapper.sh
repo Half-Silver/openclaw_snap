@@ -8,6 +8,10 @@ export PATH="$SNAP/bin:$SNAP/usr/bin:$PATH"
 # Set production environment
 export NODE_ENV=production
 
+# Allow running as root in the snap appliance environment
+export OPENCLAW_ALLOW_ROOT=1
+
+
 # Preload snap runtime overrides before the OpenClaw entrypoint reads config.
 SNAP_PRELOAD_MODULE="$SNAP/bin/snap-preload.mjs"
 if [ -n "$NODE_OPTIONS" ]; then
