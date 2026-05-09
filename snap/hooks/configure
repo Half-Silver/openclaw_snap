@@ -61,7 +61,12 @@ if os.path.exists(node_path):
 data['token'] = token
 with open(node_path, 'w') as f:
     json.dump(data, f)
+ 
+# Also write to gateway.token for the sidecar status command
+with open(os.path.join(config_dir, 'gateway.token'), 'w') as f:
+    f.write(token)
 EOF
+
 
 # Helper to apply snap config to .env
 
