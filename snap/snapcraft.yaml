@@ -24,7 +24,7 @@ platforms:
 
 apps:
   gateway:
-    command: bin/snap-wrapper.sh gateway --allow-unconfigured
+    command: bin/snap-wrapper.sh gateway run --allow-unconfigured
     daemon: simple
     restart-condition: always
     plugs:
