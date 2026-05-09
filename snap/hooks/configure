@@ -110,13 +110,17 @@ import os, json, subprocess
 config_dir = os.environ.get('SNAP_COMMON') + '/.openclaw'
 openclaw_json_path = os.path.join(config_dir, 'openclaw.json')
 
-try:
-    res = subprocess.run(['snapctl', 'get', 'model'], capture_output=True, text=True)
-    model = res.stdout.strip()
-except:
-    model = ''
+def get_config(key):
+    try:
+        res = subprocess.run(['snapctl', 'get', key], capture_output=True, text=True)
+        return res.stdout.strip()
+    except:
+        return ''
 
-if model:
+model = get_config('model')
+telegram_token = get_config('telegram-bot-token')
+
+if model or telegram_token:
     data = {}
     if os.path.exists(openclaw_json_path):
         try:
@@ -125,15 +129,23 @@ if model:
         except:
             pass
             
-    if 'agents' not in data:
-        data['agents'] = {}
-    if 'defaults' not in data['agents']:
-        data['agents']['defaults'] = {}
-    if 'model' not in data['agents']['defaults']:
-        data['agents']['defaults']['model'] = {}
+    if model:
+        if 'agents' not in data:
+            data['agents'] = {}
+        if 'defaults' not in data['agents']:
+            data['agents']['defaults'] = {}
+        if 'model' not in data['agents']['defaults']:
+            data['agents']['defaults']['model'] = {}
+        data['agents']['defaults']['model']['primary'] = model
         
-    data['agents']['defaults']['model']['primary'] = model
-    
+    if telegram_token:
+        if 'channels' not in data:
+            data['channels'] = {}
+        if 'telegram' not in data['channels']:
+            data['channels']['telegram'] = {}
+        data['channels']['telegram']['enabled'] = True
+        data['channels']['telegram']['botToken'] = telegram_token
+        
     with open(openclaw_json_path, 'w') as f:
         json.dump(data, f, indent=2)
 EOF
@@ -145,7 +157,7 @@ apply_config "gemini-api-key" "GEMINI_API_KEY"
 apply_config "openrouter-api-key" "OPENROUTER_API_KEY"
 
 # --- Messaging Channels ---
-apply_config "telegram-bot-token" "TELEGRAM_BOT_TOKEN"
+# Telegram is handled by the Python script above to write to openclaw.json
 apply_config "discord-bot-token" "DISCORD_BOT_TOKEN"
 apply_config "slack-bot-token" "SLACK_BOT_TOKEN"
 apply_config "slack-app-token" "SLACK_APP_TOKEN"
