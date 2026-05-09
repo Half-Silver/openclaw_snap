@@ -25,6 +25,14 @@ fi
 export OPENCLAW_STATE_DIR="$SNAP_COMMON/.openclaw"
 export OPENCLAW_CONFIG_PATH="$SNAP_COMMON/.openclaw/openclaw.json"
 
+# Load environment variables from .env file
+if [ -f "$OPENCLAW_STATE_DIR/.env" ]; then
+  echo "Loading environment variables from $OPENCLAW_STATE_DIR/.env" >&2
+  set -a
+  . "$OPENCLAW_STATE_DIR/.env"
+  set +a
+fi
+
 # Support for dynamic port configuration via 'snap set all-dev-openclaw port=...'
 PORT=$(snapctl get port)
 if [ -z "$PORT" ]; then
