@@ -85,6 +85,8 @@ fi
 
 # Handle special commands
 if [ "$1" = "get-token" ]; then
+  TOKEN_FILE="$OPENCLAW_STATE_DIR/gateway.token"
+  
   if [ -f "$TOKEN_FILE" ]; then
     echo "=========================================================================="
     echo "🔑 OpenClaw Gateway Token:"
@@ -92,12 +94,27 @@ if [ "$1" = "get-token" ]; then
     echo ""
     echo "Paste this token into the Dashboard at http://localhost:3000"
     echo "=========================================================================="
+  elif [ -f "$OPENCLAW_CONFIG_PATH" ]; then
+    # Fallback: Try to extract the token from openclaw.json if it exists
+    TOKEN=$(grep -o '"token": *"[^"]*"' "$OPENCLAW_CONFIG_PATH" | head -n 1 | cut -d'"' -f4)
+    if [ -n "$TOKEN" ]; then
+      echo "=========================================================================="
+      echo "🔑 OpenClaw Gateway Token (extracted from config):"
+      echo "$TOKEN"
+      echo ""
+      echo "Paste this token into the Dashboard at http://localhost:3000"
+      echo "=========================================================================="
+    else
+      echo "❌ Token not found in $OPENCLAW_CONFIG_PATH."
+      echo "Is the gateway configured? Try starting it first."
+    fi
   else
-    echo "❌ Token file not found at $TOKEN_FILE."
+    echo "❌ Token file not found."
     echo "Is the gateway running? Try starting it first."
   fi
   exit 0
 fi
+
 
 exec "$SNAP/bin/node" "$SNAP/openclaw.mjs" "$@"
 

@@ -30,7 +30,6 @@ apps:
     plugs:
       - network
       - network-bind
-      - home
 
   node:
     command: bin/snap-wrapper.sh node run
@@ -39,20 +38,17 @@ apps:
     plugs:
       - network
       - network-bind
-      - home
 
   openclaw:
     command: bin/snap-wrapper.sh
     plugs:
       - network
       - network-bind
-      - home
 
   get-token:
     command: bin/snap-wrapper.sh get-token
     plugs:
       - network
-      - home
 
   ct-engine:
 
