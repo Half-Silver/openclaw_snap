@@ -11,7 +11,60 @@ ENV_FILE="$CONFIG_DIR/.env"
 touch "$ENV_FILE"
 chmod 644 "$ENV_FILE" 2>/dev/null || true
 
+# --- Token Synchronization ---
+# Generate a shared token for gateway and node if it doesn't exist.
+# This avoids the 'token missing' error on local node connection.
+python3 << 'EOF'
+import os, json, secrets
+
+config_dir = os.environ.get('SNAP_COMMON') + '/.openclaw'
+env_path = os.path.join(config_dir, '.env')
+node_path = os.path.join(config_dir, 'node.json')
+
+# Try to find existing token
+token = ''
+if os.path.exists(env_path):
+    with open(env_path) as f:
+        for line in f:
+            if line.startswith('OPENCLAW_GATEWAY_TOKEN='):
+                token = line.split('=', 1)[1].strip()
+                break
+
+if not token and os.path.exists(node_path):
+    try:
+        with open(node_path) as f:
+            data = json.load(f)
+            token = data.get('token', '')
+    except:
+        pass
+
+if not token:
+    token = secrets.token_hex(16)
+
+# Write to .env
+lines = []
+if os.path.exists(env_path):
+    with open(env_path) as f:
+        lines = [l for l in f if not l.startswith('OPENCLAW_GATEWAY_TOKEN=')]
+lines.append(f'OPENCLAW_GATEWAY_TOKEN={token}\n')
+with open(env_path, 'w') as f:
+    f.writelines(lines)
+
+# Write to node.json
+data = {'version': 1, 'nodeId': 'node-001'}
+if os.path.exists(node_path):
+    try:
+        with open(node_path) as f:
+            data = json.load(f)
+    except:
+        pass
+data['token'] = token
+with open(node_path, 'w') as f:
+    json.dump(data, f)
+EOF
+
 # Helper to apply snap config to .env
+
 apply_config() {
     snap_key="$1"
     env_key="$2"
