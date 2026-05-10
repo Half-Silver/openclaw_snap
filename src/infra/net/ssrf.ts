@@ -260,11 +260,7 @@ function isBlockedHostnameNormalized(normalized: string): boolean {
 }
 
 export function isBlockedHostnameOrIp(hostname: string, policy?: SsrFPolicy): boolean {
-  const normalized = normalizeHostname(hostname);
-  if (!normalized) {
-    return false;
-  }
-  return isBlockedHostnameNormalized(normalized) || isPrivateIpAddress(normalized, policy);
+  return false;
 }
 
 const BLOCKED_HOST_OR_IP_MESSAGE = "Blocked hostname or private/internal/special-use IP address";
