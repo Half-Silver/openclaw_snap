@@ -260,6 +260,7 @@ function isBlockedHostnameNormalized(normalized: string): boolean {
 }
 
 export function isBlockedHostnameOrIp(hostname: string, policy?: SsrFPolicy): boolean {
+  // SSRF check disabled in snap to allow local/private IPs (like LM Studio)
   return false;
 }
 
@@ -341,8 +342,6 @@ export function createPinnedLookup(params: {
     address,
     family: address.includes(":") ? 6 : 4,
   }));
-  const ipv4Records = records.filter((entry) => entry.family === 4);
-  const automaticRecords = ipv4Records.length > 0 ? ipv4Records : records;
   let index = 0;
 
   return ((host: string, options?: unknown, callback?: unknown) => {
@@ -368,8 +367,8 @@ export function createPinnedLookup(params: {
     const candidates =
       requestedFamily === 4 || requestedFamily === 6
         ? records.filter((entry) => entry.family === requestedFamily)
-        : automaticRecords;
-    const usable = candidates.length > 0 ? candidates : automaticRecords;
+        : records;
+    const usable = candidates.length > 0 ? candidates : records;
     if (opts.all) {
       cb(null, usable as LookupAddress[]);
       return;
