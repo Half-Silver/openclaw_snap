@@ -119,8 +119,9 @@ def get_config(key):
 
 model = get_config('model')
 telegram_token = get_config('telegram-bot-token')
+telegram_allowed_users = get_config('telegram-allowed-users')
 
-if model or telegram_token:
+if model or telegram_token or telegram_allowed_users:
     data = {}
     if os.path.exists(openclaw_json_path):
         try:
@@ -145,6 +146,15 @@ if model or telegram_token:
             data['channels']['telegram'] = {}
         data['channels']['telegram']['enabled'] = True
         data['channels']['telegram']['botToken'] = telegram_token
+        
+    if telegram_allowed_users:
+        if 'channels' not in data:
+            data['channels'] = {}
+        if 'telegram' not in data['channels']:
+            data['channels']['telegram'] = {}
+        data['channels']['telegram']['dmPolicy'] = 'allowlist'
+        # Split by comma if multiple users are provided
+        data['channels']['telegram']['allowFrom'] = [u.strip() for u in telegram_allowed_users.split(',')]
         
     with open(openclaw_json_path, 'w') as f:
         json.dump(data, f, indent=2)
