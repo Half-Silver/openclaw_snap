@@ -260,8 +260,11 @@ function isBlockedHostnameNormalized(normalized: string): boolean {
 }
 
 export function isBlockedHostnameOrIp(hostname: string, policy?: SsrFPolicy): boolean {
-  // SSRF check disabled in snap to allow local/private IPs (like LM Studio)
-  return false;
+  const normalized = normalizeHostname(hostname);
+  if (!normalized) {
+    return false;
+  }
+  return isBlockedHostnameNormalized(normalized) || isPrivateIpAddress(normalized, policy);
 }
 
 const BLOCKED_HOST_OR_IP_MESSAGE = "Blocked hostname or private/internal/special-use IP address";
