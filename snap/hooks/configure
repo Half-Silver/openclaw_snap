@@ -120,8 +120,10 @@ def get_config(key):
 model = get_config('model')
 telegram_token = get_config('telegram-bot-token')
 telegram_allowed_users = get_config('telegram-allowed-users')
+lmstudio_url = get_config('lmstudio-base-url')
+lmstudio_model = get_config('lmstudio-model-id')
 
-if model or telegram_token or telegram_allowed_users:
+if model or telegram_token or telegram_allowed_users or (lmstudio_url and lmstudio_model):
     data = {}
     if os.path.exists(openclaw_json_path):
         try:
@@ -155,6 +157,34 @@ if model or telegram_token or telegram_allowed_users:
         data['channels']['telegram']['dmPolicy'] = 'allowlist'
         # Split by comma if multiple users are provided
         data['channels']['telegram']['allowFrom'] = [u.strip() for u in telegram_allowed_users.split(',')]
+        
+    if lmstudio_url and lmstudio_model:
+        if 'models' not in data:
+            data['models'] = {}
+        if 'providers' not in data['models']:
+            data['models']['providers'] = {}
+            
+        # Append /v1 if missing
+        if not lmstudio_url.endswith('/v1') and not lmstudio_url.endswith('/v1/'):
+            lmstudio_url = lmstudio_url.rstrip('/') + '/v1'
+            
+        # Extract actual model ID if it contains the provider prefix
+        actual_model_id = lmstudio_model
+        if lmstudio_model.startswith('local-lms/'):
+            actual_model_id = lmstudio_model[len('local-lms/'):]
+            
+        data['models']['providers']['local-lms'] = {
+            "baseUrl": lmstudio_url,
+            "apiKey": "lm-studio",
+            "api": "openai-responses",
+            "models": [
+                {
+                    "id": actual_model_id,
+                    "name": actual_model_id,
+                    "contextWindow": 32768
+                }
+            ]
+        }
         
     with open(openclaw_json_path, 'w') as f:
         json.dump(data, f, indent=2)
