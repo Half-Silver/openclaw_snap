@@ -53,30 +53,3 @@ function shouldEnableRemoteHttpUi(params) {
     params.bindOverride === "auto"
   );
 }
-
-// OpenClaw Snap IPv6 Workaround
-// The internal ssrf dispatcher performs round-robin across all resolved IPs.
-// In environments without proper IPv6 routing, this causes connection timeouts.
-// We force IPv4 resolution here to prevent those timeouts.
-import dns from "node:dns";
-import dnsPromises from "node:dns/promises";
-
-const originalLookup = dns.lookup;
-dns.lookup = function (hostname, options, callback) {
-  if (typeof options === "function") {
-    callback = options;
-    options = {};
-  } else if (!options) {
-    options = {};
-  }
-  let newOptions = typeof options === "object" && options !== null ? { ...options } : {};
-  newOptions.family = 4;
-  return originalLookup(hostname, newOptions, callback);
-};
-
-const originalPromisesLookup = dnsPromises.lookup;
-dnsPromises.lookup = async function (hostname, options) {
-  let newOptions = typeof options === "object" && options !== null ? { ...options } : {};
-  newOptions.family = 4;
-  return originalPromisesLookup(hostname, newOptions);
-};

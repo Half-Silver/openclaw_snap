@@ -107,6 +107,10 @@ parts:
       # Use hoisted linker to avoid external symlinks to the pnpm store
       pnpm install --frozen-lockfile --node-linker=hoisted
       pnpm build
+      
+      # Force IPv4 preference in compiled SSRF dispatcher to avoid IPv6 timeouts
+      find dist -name "ssrf-*.js" -exec sed -i 's/? records.filter((entry) => entry.family === requestedFamily) : records;/? records.filter((entry) => entry.family === requestedFamily) : (records.filter(e => e.family === 4).length > 0 ? records.filter(e => e.family === 4) : records);/g' {} +
+      
       pnpm ui:build
       
       # Clean up dev dependencies
