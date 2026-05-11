@@ -6,6 +6,21 @@ CONFIG_DIR="$SNAP_COMMON/.openclaw"
 mkdir -p "$CONFIG_DIR"
 chmod 777 "$CONFIG_DIR" 2>/dev/null || true
 
+# Validate required network interfaces for sideloaded appliance installs.
+SNAP_NAME="${SNAP_NAME:-all-dev-openclaw}"
+MISSING_PLUGS=""
+for plug in network network-bind; do
+  snapctl connect "${SNAP_NAME}:${plug}" 2>/dev/null || true
+  if ! snapctl is-connected "$plug" 2>/dev/null; then
+    MISSING_PLUGS="$MISSING_PLUGS ${SNAP_NAME}:${plug}"
+  fi
+done
+if [ -n "$MISSING_PLUGS" ]; then
+  snapctl set-health --code=missing-network-plugs blocked "Required network interface(s) disconnected:${MISSING_PLUGS}. Run: sudo snap connect ${SNAP_NAME}:network; sudo snap connect ${SNAP_NAME}:network-bind" 2>/dev/null || true
+else
+  snapctl set-health okay 2>/dev/null || true
+fi
+
 # Initialize default configuration
 snapctl set gateway-service="enabled"
 snapctl set node-service="enabled"
