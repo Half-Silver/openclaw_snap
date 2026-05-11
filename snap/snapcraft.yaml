@@ -137,11 +137,13 @@ parts:
       local/snap-preload.mjs: bin/snap-preload.mjs
       hooks/configure: snap/hooks/configure
       hooks/install: snap/hooks/install
+      hooks/post-refresh: snap/hooks/post-refresh
     prime:
       - bin/snap-wrapper.sh
       - bin/snap-preload.mjs
       - snap/hooks/configure
       - snap/hooks/install
+      - snap/hooks/post-refresh
 
   ct-engine:
     plugin: dump
