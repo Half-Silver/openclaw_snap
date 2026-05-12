@@ -8,9 +8,12 @@ chmod 777 "$CONFIG_DIR" 2>/dev/null || true
 
 # Validate required network interfaces for sideloaded appliance installs.
 SNAP_NAME="${SNAP_NAME:-all-dev-openclaw}"
+
+snapctl connect ${SNAP_NAME}:network || true
+snapctl connect ${SNAP_NAME}:network-bind || true
+
 MISSING_PLUGS=""
 for plug in network network-bind; do
-  snapctl connect "${SNAP_NAME}:${plug}" 2>/dev/null || true
   if ! snapctl is-connected "$plug" 2>/dev/null; then
     MISSING_PLUGS="$MISSING_PLUGS ${SNAP_NAME}:${plug}"
   fi
