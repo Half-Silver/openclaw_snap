@@ -39,7 +39,7 @@ run:
   command: ""
 
 sidecar:
-  status_command: "IP=$(hostname -I | awk '{print $1}'); TOKEN=$(cat $SNAP_COMMON/.openclaw/gateway.token 2>/dev/null || echo 'generating...'); echo \"dashboard: http://$IP:3000?token=$TOKEN\""
+  status_command: "IP=$(hostname -I | awk '{print $1}'); TOKEN=$(grep -o '\"token\": *\"[^\"]*\"' $SNAP_COMMON/.openclaw/openclaw.json 2>/dev/null | head -n 1 | cut -d'\"' -f4); [ -z \"$TOKEN\" ] && TOKEN=$(cat $SNAP_COMMON/.openclaw/gateway.token 2>/dev/null || echo 'generating...'); echo \"dashboard: http://$IP:3000?token=$TOKEN\""
 
 
 output:
