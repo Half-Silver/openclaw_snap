@@ -29,7 +29,7 @@ snapctl set gateway-service="enabled"
 snapctl set node-service="enabled"
 snapctl set model="openrouter/google/gemini-2.5-flash:free"
 snapctl set port=3000
-snapctl set bind="auto"
+snapctl set bind="lan"
 snapctl set remote-http-ui=true
 snapctl set log-level="info"
 
