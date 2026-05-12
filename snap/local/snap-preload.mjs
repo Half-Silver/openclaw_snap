@@ -20,8 +20,13 @@ if (snapRoot) {
     if (remoteHttpUiEnabled) {
       // Break-glass snap path for direct http://<lan-ip>:<port>/ Control UI access on
       // headless appliances. This matches the explicit non-loopback snap bind choice.
-      setConfigOverride("gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback", true);
-      setConfigOverride("gateway.controlUi.dangerouslyDisableDeviceAuth", true);
+      if (
+        process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "1" ||
+        process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "true"
+      ) {
+        setConfigOverride("gateway.controlUi.dangerouslyAllowHostHeaderOriginFallback", true);
+        setConfigOverride("gateway.controlUi.dangerouslyDisableDeviceAuth", true);
+      }
     }
   }
 }
@@ -34,6 +39,8 @@ function normalizeBind(raw) {
     case "tailnet":
     case "auto":
       return value;
+    case "0.0.0.0":
+      return "auto";
     default:
       return undefined;
   }
