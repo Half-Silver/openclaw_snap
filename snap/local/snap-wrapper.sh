@@ -131,6 +131,11 @@ if [ "$1" = "get-token" ]; then
 fi
 
 
+# Provide the gateway token to all processes if it exists and isn't overridden
+if [ -z "$OPENCLAW_GATEWAY_TOKEN" ] && [ -f "$OPENCLAW_STATE_DIR/gateway.token" ]; then
+  export OPENCLAW_GATEWAY_TOKEN="$(cat "$OPENCLAW_STATE_DIR/gateway.token")"
+fi
+
 # Intercept 'gateway run' to pass the correct bind mode directly
 if [ "$1" = "gateway" ] && [ "$2" = "run" ]; then
   shift 2
