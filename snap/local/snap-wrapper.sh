@@ -131,9 +131,19 @@ if [ "$1" = "get-token" ]; then
 fi
 
 
+
 # Provide the gateway token to all processes if it exists and isn't overridden
-if [ -z "$OPENCLAW_GATEWAY_TOKEN" ] && [ -f "$OPENCLAW_STATE_DIR/gateway.token" ]; then
-  export OPENCLAW_GATEWAY_TOKEN="$(cat "$OPENCLAW_STATE_DIR/gateway.token")"
+if [ -z "$OPENCLAW_GATEWAY_TOKEN" ]; then
+  if [ -f "$OPENCLAW_CONFIG_PATH" ]; then
+    _extracted=$(grep -o '"token": *"[^"]*"' "$OPENCLAW_CONFIG_PATH" | head -n 1 | cut -d'"' -f4)
+    if [ -n "$_extracted" ]; then
+      export OPENCLAW_GATEWAY_TOKEN="$_extracted"
+    fi
+  fi
+  
+  if [ -z "$OPENCLAW_GATEWAY_TOKEN" ] && [ -f "$OPENCLAW_STATE_DIR/gateway.token" ]; then
+    export OPENCLAW_GATEWAY_TOKEN="$(cat "$OPENCLAW_STATE_DIR/gateway.token")"
+  fi
 fi
 
 # Intercept 'gateway run' to pass the correct bind mode directly
