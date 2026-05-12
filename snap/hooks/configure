@@ -122,8 +122,9 @@ telegram_token = get_config('telegram-bot-token')
 telegram_allowed_users = get_config('telegram-allowed-users')
 lmstudio_url = get_config('lmstudio-base-url')
 lmstudio_model = get_config('lmstudio-model-id')
+max_tokens = get_config('max-tokens')
 
-if model or telegram_token or telegram_allowed_users or (lmstudio_url and lmstudio_model):
+if model or telegram_token or telegram_allowed_users or (lmstudio_url and lmstudio_model) or max_tokens:
     data = {}
     if os.path.exists(openclaw_json_path):
         try:
@@ -140,6 +141,29 @@ if model or telegram_token or telegram_allowed_users or (lmstudio_url and lmstud
         if 'model' not in data['agents']['defaults']:
             data['agents']['defaults']['model'] = {}
         data['agents']['defaults']['model']['primary'] = model
+        
+    if max_tokens and model:
+        parts = model.split('/', 1)
+        if len(parts) == 2:
+            prov, mod_id = parts
+            if 'models' not in data: data['models'] = {}
+            if 'providers' not in data['models']: data['models']['providers'] = {}
+            if prov not in data['models']['providers']: data['models']['providers'][prov] = {}
+            if 'models' not in data['models']['providers'][prov]: data['models']['providers'][prov]['models'] = []
+            
+            model_list = data['models']['providers'][prov]['models']
+            found = False
+            for m in model_list:
+                if m['id'] == mod_id:
+                    m['maxTokens'] = int(max_tokens)
+                    found = True
+                    break
+            if not found:
+                model_list.append({
+                    'id': mod_id,
+                    'name': mod_id.split('/')[-1],
+                    'maxTokens': int(max_tokens)
+                })
         
     if telegram_token:
         if 'channels' not in data:
