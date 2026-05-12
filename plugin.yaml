@@ -19,31 +19,36 @@ config:
   # --- Core ---
   model: { required: false, type: "string", default: "openrouter/auto" }
 
-
   # --- AI Keys ---
-  openrouter-api-key: { required: false, type: "string", description: "OpenRouter API Key" }
-  openai-api-key: { required: false, type: "string", description: "OpenAI API Key" }
-  anthropic-api-key: { required: false, type: "string", description: "Anthropic API Key" }
-  gemini-api-key: { required: false, type: "string", description: "Google Gemini API Key" }
+  openrouter-api-key:
+    { required: false, type: "string", description: "OpenRouter API Key" }
+  openai-api-key:
+    { required: false, type: "string", description: "OpenAI API Key" }
+  anthropic-api-key:
+    { required: false, type: "string", description: "Anthropic API Key" }
+  gemini-api-key:
+    { required: false, type: "string", description: "Google Gemini API Key" }
 
   # --- Channels ---
-  telegram-bot-token: { required: false, type: "string", description: "Telegram Bot Token" }
-  discord-bot-token: { required: false, type: "string", description: "Discord Bot Token" }
+  telegram-bot-token:
+    { required: false, type: "string", description: "Telegram Bot Token" }
+  discord-bot-token:
+    { required: false, type: "string", description: "Discord Bot Token" }
 
   # --- Search ---
-  brave-api-key: { required: false, type: "string", description: "Brave Search API Key" }
-  perplexity-api-key: { required: false, type: "string", description: "Perplexity API Key" }
+  brave-api-key:
+    { required: false, type: "string", description: "Brave Search API Key" }
+  perplexity-api-key:
+    { required: false, type: "string", description: "Perplexity API Key" }
 
 # Sidecar mode: engine reports status (including security token)
 run:
   command: ""
 
 sidecar:
-  status_command: "IP=$(hostname -I | awk '{print $1}'); TOKEN=$(grep -o '\"token\": *\"[^\"]*\"' $SNAP_COMMON/.openclaw/openclaw.json 2>/dev/null | head -n 1 | cut -d'\"' -f4); [ -z \"$TOKEN\" ] && TOKEN=$(cat $SNAP_COMMON/.openclaw/gateway.token 2>/dev/null || echo 'generating...'); echo \"dashboard: http://$IP:3000?token=$TOKEN\""
-
+  status_command: 'IP=$(hostname -I | awk ''{print $1}''); TOKEN=$(cat $SNAP_COMMON/.openclaw/gateway.token 2>/dev/null || echo ''generating...''); echo "dashboard: http://$IP:3000?token=$TOKEN"'
 
 output:
-
   mode: "logs"
   interval: 0
 

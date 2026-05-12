@@ -11,6 +11,9 @@ export NODE_ENV=production
 # Allow running as root in the snap appliance environment
 export OPENCLAW_ALLOW_ROOT=1
 
+# Disable debug proxy to prevent buffering in streaming scenarios
+export OPENCLAW_DEBUG_PROXY_ENABLED=0
+
 
 # Preload snap runtime overrides before the OpenClaw entrypoint reads config.
 SNAP_PRELOAD_MODULE="$SNAP/bin/snap-preload.mjs"

@@ -157,3 +157,10 @@ Skills own workflows; root owns hard policy and routing.
 - Local-only `.agents` ignores: `.git/info/exclude`, not repo `.gitignore`.
 - Provider tool schemas: prefer flat string enum helpers over `Type.Union([Type.Literal(...)])`; some providers reject `anyOf`.
 - External messaging: no token-delta channel messages. Follow `docs/concepts/streaming.md`.
+
+<!-- SPECKIT START -->
+
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+
+<!-- SPECKIT END -->
