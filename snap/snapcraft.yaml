@@ -27,6 +27,8 @@ apps:
     command: bin/snap-wrapper.sh gateway run --allow-unconfigured
     daemon: simple
     restart-condition: always
+    environment:
+      OPENCLAW_SNAP_INSECURE_REMOTE: "true"
     plugs:
       - network
       - network-bind
@@ -35,6 +37,8 @@ apps:
     command: bin/snap-wrapper.sh node run
     daemon: simple
     restart-condition: always
+    environment:
+      OPENCLAW_SNAP_INSECURE_REMOTE: "true"
     plugs:
       - network
       - network-bind
