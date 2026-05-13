@@ -426,11 +426,15 @@ function resolveModelTransportSsrFPolicy(params: {
   if (fakeIpPolicy) {
     return {
       ...fakeIpPolicy,
-      ...(params.allowPrivateNetwork ? { allowPrivateNetwork: true } : {}),
+      ...(params.allowPrivateNetwork || process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "true"
+        ? { allowPrivateNetwork: true }
+        : {}),
     };
   }
 
-  return params.allowPrivateNetwork ? { allowPrivateNetwork: true } : undefined;
+  return params.allowPrivateNetwork || process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "true"
+    ? { allowPrivateNetwork: true }
+    : undefined;
 }
 
 export function buildGuardedModelFetch(
