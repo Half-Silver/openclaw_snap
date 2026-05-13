@@ -670,6 +670,9 @@ async function processResponsesStream(
   const sseDebugMode = resolveModelSseDebugMode();
   const blockIndex = () => output.content.length - 1;
   for await (const rawEvent of openaiStream) {
+    if (process.env.OPENCLAW_DEBUG_SSE === "raw") {
+      log.info(`RAW EVENT: ${JSON.stringify(rawEvent)}`);
+    }
     const event = rawEvent as Record<string, unknown>;
     const type = stringifyUnknown(event.type);
     eventCount += 1;
@@ -1050,23 +1053,34 @@ export function createOpenAIResponsesTransportStreamFn(): StreamFn {
           enforceCodeModeResponsesToolSurface(params);
           assertCodeModeResponsesToolSurface(params);
         }
+        const forceNoStream = process.env.OPENCLAW_FORCE_NO_STREAM === "1";
+        if (forceNoStream) {
+          (params as any).stream = false;
+        }
+
         const requestStartedAt = Date.now();
         const requestOptions = buildOpenAISdkRequestOptions(model, options?.signal);
         emitModelTransportDebug(
           log,
           `[responses] start provider=${model.provider} api=${model.api} model=${model.id} ` +
             `baseUrl=${formatModelTransportDebugBaseUrl(model.baseUrl)} timeoutMs=${safeDebugValue(requestOptions?.timeout)} ` +
-            `apiKey=${apiKey ? "present" : "missing"} ${summarizeResponsesPayload(params)}`,
+            `apiKey=${apiKey ? "present" : "missing"} stream=${params.stream} ${summarizeResponsesPayload(params)}`,
         );
-        const responseStream = (await client.responses.create(
-          params as never,
-          requestOptions,
-        )) as unknown as AsyncIterable<unknown>;
+
+        emitModelTransportDebug(log, `[responses] create start (stream=${params.stream})`);
+        const response = await client.responses.create(params as never, requestOptions);
         emitModelTransportDebug(
           log,
           `[responses] headers provider=${model.provider} api=${model.api} model=${model.id} ` +
             `elapsedMs=${Date.now() - requestStartedAt}`,
         );
+
+        const responseStream = forceNoStream
+          ? (async function* () {
+              yield response;
+            })()
+          : (response as unknown as AsyncIterable<unknown>);
+
         stream.push({ type: "start", partial: output as never });
         await processResponsesStream(responseStream, output, stream, model, {
           serviceTier: (options as OpenAIResponsesOptions | undefined)?.serviceTier,
@@ -1616,12 +1630,40 @@ export function createOpenAICompletionsTransportStreamFn(): StreamFn {
           enforceCodeModeResponsesToolSurface(params);
           assertCodeModeResponsesToolSurface(params);
         }
-        const responseStream = (await client.chat.completions.create(
+
+        const forceNoStream = process.env.OPENCLAW_FORCE_NO_STREAM === "1";
+        if (forceNoStream) {
+          (params as any).stream = false;
+          delete params.stream_options;
+        }
+
+        emitModelTransportDebug(
+          log,
+          `[completions] create start: ${model.provider}/${model.id} (stream=${params.stream})`,
+        );
+        const response = await client.chat.completions.create(
           params as never,
           buildOpenAISdkRequestOptions(model, options?.signal),
-        )) as unknown as AsyncIterable<ChatCompletionChunk>;
-        stream.push({ type: "start", partial: output as never });
-        await processOpenAICompletionsStream(responseStream, output, model, stream);
+        );
+        emitModelTransportDebug(log, `[completions] create response received`);
+
+        if (forceNoStream) {
+          const chunk = response as any;
+          stream.push({ type: "start", partial: output as never });
+
+          await processOpenAICompletionsStream(
+            (async function* () {
+              yield chunk;
+            })(),
+            output,
+            model,
+            stream,
+          );
+        } else {
+          const responseStream = response as unknown as AsyncIterable<ChatCompletionChunk>;
+          stream.push({ type: "start", partial: output as never });
+          await processOpenAICompletionsStream(responseStream, output, model, stream);
+        }
         if (options?.signal?.aborted) {
           throw new Error("Request was aborted");
         }
@@ -1791,6 +1833,9 @@ async function processOpenAICompletionsStream(
     }
   };
   for await (const rawChunk of responseStream as AsyncIterable<unknown>) {
+    if (process.env.OPENCLAW_DEBUG_SSE === "raw") {
+      log.info(`RAW CHUNK: ${JSON.stringify(rawChunk)}`);
+    }
     if (!rawChunk || typeof rawChunk !== "object") {
       continue;
     }

@@ -444,7 +444,11 @@ export function buildGuardedModelFetch(
 ): typeof fetch {
   const requestConfig = resolveModelRequestPolicy(model);
   const dispatcherPolicy = buildProviderRequestDispatcherPolicy(requestConfig);
-  const requestTimeoutMs = resolveModelRequestTimeoutMs(model, timeoutMs);
+  let requestTimeoutMs = resolveModelRequestTimeoutMs(model, timeoutMs);
+  if (requestTimeoutMs === undefined) {
+    // Default to 60 seconds if no timeout is specified, as a safeguard against stalling.
+    requestTimeoutMs = 60_000;
+  }
   const summarizeError = (error: unknown): string => {
     if (!error || typeof error !== "object") {
       return `type=${typeof error}`;
@@ -519,16 +523,19 @@ export function buildGuardedModelFetch(
         `policy=${policy ? "custom" : "default"}`,
     );
     try {
+      emitModelTransportDebug(log, `[model-fetch] ensuring local service`);
       localServiceLease = await ensureModelProviderLocalService(
         model,
         (requestInit ?? init)?.headers,
         (requestInit ?? init)?.signal,
       );
+      emitModelTransportDebug(log, `[model-fetch] starting fetchWithSsrFGuard`);
       result = await fetchWithSsrFGuard(
         useEnvProxy
           ? withTrustedEnvProxyGuardedFetchMode(guardedFetchOptions)
           : guardedFetchOptions,
       );
+      emitModelTransportDebug(log, `[model-fetch] fetchWithSsrFGuard success`);
     } catch (error) {
       log.warn(
         `[model-fetch] error provider=${model.provider} api=${model.api} model=${model.id} ` +
