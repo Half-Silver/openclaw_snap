@@ -2021,7 +2021,12 @@ function getCompletionsReasoningDeltas(
     }
   }
   if (!usedReasoningThinkingDetails) {
-    const reasoningFields = ["reasoning_content", "reasoning", "reasoning_text"] as const;
+    const reasoningFields = [
+      "reasoning_content",
+      "reasoning",
+      "reasoning_text",
+      "reasoning_summary_text",
+    ] as const;
     for (const field of reasoningFields) {
       const value = delta[field];
       if (typeof value === "string" && value.length > 0) {
