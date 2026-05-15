@@ -382,6 +382,9 @@ async function* observeModelCallIterator<T>(
       const now = Date.now();
       if (now - lastProgressReportAt > MODEL_CALL_PROGRESS_REPORT_INTERVAL_MS) {
         lastProgressReportAt = now;
+        log.info(
+          `[model-call] emitting progress heartbeat: runId=${eventBase.runId} elapsedMs=${now - startedAt}`,
+        );
         emitTrustedDiagnosticEvent({
           type: "run.progress",
           runId: eventBase.runId,

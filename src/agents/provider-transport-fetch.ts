@@ -425,8 +425,9 @@ export function buildGuardedModelFetch(
   const dispatcherPolicy = buildProviderRequestDispatcherPolicy(requestConfig);
   let requestTimeoutMs = resolveModelRequestTimeoutMs(model, timeoutMs);
   if (requestTimeoutMs === undefined) {
-    // Default to 60 seconds if no timeout is specified, as a safeguard against stalling.
-    requestTimeoutMs = 60_000;
+    // Default to 120 seconds if no timeout is specified, as a safeguard against stalling
+    // while allowing enough time for slow reasoning models (e.g. DeepSeek-R1) to start.
+    requestTimeoutMs = 120_000;
   }
   const summarizeError = (error: unknown): string => {
     if (!error || typeof error !== "object") {
