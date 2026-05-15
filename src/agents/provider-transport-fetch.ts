@@ -131,28 +131,7 @@ function sanitizeOpenAISdkSseResponse(
       // OpenAI's SDK currently tries to JSON.parse event-only or blank-data SSE
       // messages. Drop those malformed keepalive-style blocks before it parses.
       if (hasReadableSseData(block)) {
-        let rewrittenBlock = block;
-        if (block.startsWith("data: ")) {
-          try {
-            const dataStr = block.slice(6);
-            if (dataStr.trim() !== "[DONE]") {
-              const parsed = JSON.parse(dataStr);
-              const delta = parsed.choices?.[0]?.delta;
-              if (
-                delta &&
-                typeof delta.reasoning === "string" &&
-                delta.reasoning.length > 0 &&
-                !delta.content
-              ) {
-                delta.content = delta.reasoning;
-                rewrittenBlock = "data: " + JSON.stringify(parsed);
-              }
-            }
-          } catch (e) {
-            // Ignore parse errors
-          }
-        }
-        controller.enqueue(encoder.encode(`${rewrittenBlock}${separator}`));
+        controller.enqueue(encoder.encode(`${block}${separator}`));
       }
     }
   };
