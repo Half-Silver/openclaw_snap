@@ -68,6 +68,7 @@ type ModelCallObservationState = {
 };
 
 const MODEL_CALL_STREAM_RETURN_TIMEOUT_MS = 1000;
+const MODEL_CALL_PROGRESS_REPORT_INTERVAL_MS = 10000;
 const TRACEPARENT_HEADER_NAME = "traceparent";
 type ModelCallStreamOptions = Parameters<StreamFn>[2];
 
@@ -371,12 +372,24 @@ async function* observeModelCallIterator<T>(
 ): AsyncIterable<T> {
   let terminalEmitted = false;
   try {
+    let lastProgressReportAt = startedAt;
     for (;;) {
       const next = await iterator.next();
       if (next.done) {
         break;
       }
       observeResponseChunk(state, startedAt, next.value);
+      const now = Date.now();
+      if (now - lastProgressReportAt > MODEL_CALL_PROGRESS_REPORT_INTERVAL_MS) {
+        lastProgressReportAt = now;
+        emitTrustedDiagnosticEvent({
+          type: "run.progress",
+          runId: eventBase.runId,
+          sessionId: eventBase.sessionId,
+          sessionKey: eventBase.sessionKey,
+          reason: "model_call:progress",
+        });
+      }
       yield next.value;
     }
     terminalEmitted = true;
