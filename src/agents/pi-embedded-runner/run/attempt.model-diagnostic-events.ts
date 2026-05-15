@@ -22,6 +22,7 @@ import type {
   PluginHookModelCallEndedEvent,
   PluginHookModelCallStartedEvent,
 } from "../../../plugins/hook-types.js";
+import { log } from "../logger.js";
 
 export { diagnosticErrorCategory };
 
