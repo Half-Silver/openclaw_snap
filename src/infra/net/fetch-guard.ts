@@ -189,6 +189,7 @@ async function assertExplicitProxyAllowed(
   dispatcherPolicy: PinnedDispatcherPolicy | undefined,
   lookupFn: LookupFn | undefined,
   policy: SsrFPolicy | undefined,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (!dispatcherPolicy || dispatcherPolicy.mode !== "explicit-proxy") {
     return;
@@ -405,7 +406,12 @@ export async function fetchWithSsrFGuard(params: GuardedFetchOptions): Promise<G
         params.dispatcherPolicy,
         usesTrustedExplicitProxyMode ? false : params.pinDns,
       );
-      await assertExplicitProxyAllowed(params.dispatcherPolicy, params.lookupFn, params.policy);
+      await assertExplicitProxyAllowed(
+        params.dispatcherPolicy,
+        params.lookupFn,
+        params.policy,
+        signal,
+      );
       const canUseTrustedEnvProxy =
         mode === GUARDED_FETCH_MODE.TRUSTED_ENV_PROXY &&
         shouldUseEnvHttpProxyForUrl(parsedUrl.toString());
@@ -425,6 +431,7 @@ export async function fetchWithSsrFGuard(params: GuardedFetchOptions): Promise<G
         await resolvePinnedHostnameWithPolicy(parsedUrl.hostname, {
           lookupFn: params.lookupFn,
           policy: params.policy,
+          signal,
         });
         dispatcher = createHttp1EnvHttpProxyAgent(undefined, timeoutMs);
       } else if (usesTrustedExplicitProxyMode) {
