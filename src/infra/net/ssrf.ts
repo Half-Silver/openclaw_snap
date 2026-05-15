@@ -38,6 +38,28 @@ export class SsrFBlockedError extends Error {
 
 export type LookupFn = typeof dnsLookup;
 
+const DEFAULT_DNS_LOOKUP_TIMEOUT_MS = 10_000;
+
+async function withDnsTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  hostname: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`DNS lookup timed out after ${timeoutMs}ms for ${hostname}`));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
 export type SsrFPolicy = {
   allowPrivateNetwork?: boolean;
   dangerouslyAllowPrivateNetwork?: boolean;
@@ -433,19 +455,39 @@ function dedupeAndPreferIpv4(results: readonly LookupAddress[]): string[] {
 
 export async function resolvePinnedHostnameWithPolicy(
   hostname: string,
-  params: { lookupFn?: LookupFn; policy?: SsrFPolicy } = {},
+  params: {
+    lookupFn?: LookupFn;
+    policy?: SsrFPolicy;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<PinnedHostname> {
   const { normalized, skipPrivateNetworkChecks } = resolveHostnamePolicyChecks(
     hostname,
     params.policy,
   );
 
+  if (params.signal?.aborted) {
+    throw params.signal.reason || new Error("Operation aborted");
+  }
+
   const lookupFn = params.lookupFn ?? dnsLookup;
+  const timeoutMs =
+    params.timeoutMs && params.timeoutMs > 0 ? params.timeoutMs : DEFAULT_DNS_LOOKUP_TIMEOUT_MS;
+
   const results = normalizeLookupResults(
-    (await lookupFn(normalized, { all: true })) as LookupResult,
+    (await withDnsTimeout(
+      lookupFn(normalized, { all: true }),
+      timeoutMs,
+      normalized,
+    )) as LookupResult,
   );
   if (results.length === 0) {
     throw new Error(`Unable to resolve hostname: ${hostname}`);
+  }
+
+  if (params.signal?.aborted) {
+    throw params.signal.reason || new Error("Operation aborted");
   }
 
   if (!skipPrivateNetworkChecks) {
@@ -474,8 +516,13 @@ export function assertHostnameAllowedWithPolicy(hostname: string, policy?: SsrFP
 export async function resolvePinnedHostname(
   hostname: string,
   lookupFn: LookupFn = dnsLookup,
+  options: { timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<PinnedHostname> {
-  return await resolvePinnedHostnameWithPolicy(hostname, { lookupFn });
+  return await resolvePinnedHostnameWithPolicy(hostname, {
+    lookupFn,
+    timeoutMs: options.timeoutMs,
+    signal: options.signal,
+  });
 }
 
 function withPinnedLookup(

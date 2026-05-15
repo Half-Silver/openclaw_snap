@@ -216,6 +216,7 @@ async function assertExplicitProxyAllowed(
   await resolvePinnedHostnameWithPolicy(parsedProxyUrl.hostname, {
     lookupFn,
     policy: proxyPolicy,
+    signal,
   });
 }
 
@@ -435,12 +436,14 @@ export async function fetchWithSsrFGuard(params: GuardedFetchOptions): Promise<G
         await resolvePinnedHostnameWithPolicy(parsedUrl.hostname, {
           lookupFn: params.lookupFn,
           policy: params.policy,
+          signal,
         });
         dispatcher = createPolicyDispatcherWithoutPinnedDns(params.dispatcherPolicy, timeoutMs);
       } else {
         const pinned = await resolvePinnedHostnameWithPolicy(parsedUrl.hostname, {
           lookupFn: params.lookupFn,
           policy: params.policy,
+          signal,
         });
         dispatcher = createPinnedDispatcher(
           pinned,
