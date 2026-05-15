@@ -212,6 +212,30 @@ if model or telegram_token or telegram_allowed_users or (lmstudio_url and lmstud
         
     with open(openclaw_json_path, 'w') as f:
         json.dump(data, f, indent=2)
+
+    def dict_to_yaml(d, indent=0):
+        yaml_str = ""
+        for k, v in d.items():
+            if isinstance(v, dict):
+                yaml_str += " " * indent + f"{k}:\n" + dict_to_yaml(v, indent + 2)
+            elif isinstance(v, list):
+                yaml_str += " " * indent + f"{k}:\n"
+                for item in v:
+                    if isinstance(item, dict):
+                        yaml_str += " " * indent + "- " + dict_to_yaml(item, indent + 2).lstrip()
+                    else:
+                        yaml_str += " " * indent + f"- {item}\n"
+            elif isinstance(v, bool):
+                yaml_str += " " * indent + f"{k}: {'true' if v else 'false'}\n"
+            elif isinstance(v, str):
+                yaml_str += " " * indent + f"{k}: \"{v}\"\n"
+            else:
+                yaml_str += " " * indent + f"{k}: {v}\n"
+        return yaml_str
+
+    openclaw_yaml_path = os.path.join(config_dir, 'openclaw.yaml')
+    with open(openclaw_yaml_path, 'w') as f:
+        f.write(dict_to_yaml(data))
 EOF
 
 # --- AI Provider Keys ---
