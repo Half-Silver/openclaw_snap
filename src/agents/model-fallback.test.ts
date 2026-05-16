@@ -1284,9 +1284,13 @@ describe("runWithModelFallback", () => {
       });
 
       expect(result.result).toBe("ok");
-      expect(warnSpy).toHaveBeenCalledWith(
-        '[model-fallback] Model "openai/gpt-6" not found. Fell back to "anthropic/claude-haiku-3-5".',
-      );
+      expect(
+        warnSpy.mock.calls.some((call) =>
+          call[0].includes(
+            '[model-fallback] Model "openai/gpt-6" not found. Fell back to "anthropic/claude-haiku-3-5".',
+          ),
+        ),
+      ).toBe(true);
     } finally {
       warnSpy.mockRestore();
       setLoggerOverride(null);

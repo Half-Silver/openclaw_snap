@@ -209,7 +209,8 @@ describeNonWin("exec script preflight", () => {
   });
 
   it("validates scripts under literal tilde directories in workdir", async () => {
-    await withTempDir("openclaw-exec-preflight-", async (tmp) => {
+    await withTempDir("openclaw-exec-preflight-", async (tmpRaw) => {
+      const tmp = await fs.realpath(tmpRaw);
       const literalTildeDir = path.join(tmp, "~");
       await fs.mkdir(literalTildeDir, { recursive: true });
       await fs.writeFile(path.join(literalTildeDir, "bad.js"), "const value = $DM_JSON;", "utf-8");

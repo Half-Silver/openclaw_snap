@@ -177,10 +177,11 @@ describe("google web search provider", () => {
       searchConfig: { provider: "gemini" },
     });
 
-    await tool?.execute({ query: "OpenClaw docs" }, { signal: controller.signal });
+    const result = await tool?.execute({ query: "OpenClaw docs" }, { signal: controller.signal });
 
-    const init = mockFetch.mock.calls[0]?.[1] as { signal?: AbortSignal } | undefined;
-    expect(init?.signal?.aborted).toBe(true);
+    expect(result).toMatchObject({
+      error: "aborted",
+    });
   });
 
   it("reuses the Google model provider key when no web search key or env key is set", async () => {

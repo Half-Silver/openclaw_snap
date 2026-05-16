@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const { detectInstallSmokeScope } = (await import("../../scripts/ci-changed-scope.mjs")) as {
@@ -8,7 +8,9 @@ const { detectInstallSmokeScope } = (await import("../../scripts/ci-changed-scop
   };
 };
 
-const WORKFLOW_PATH = ".github/workflows/website-installer-sync.yml";
+const WORKFLOW_PATH = existsSync(".github/workflows/website-installer-sync.yml")
+  ? ".github/workflows/website-installer-sync.yml"
+  : ".github/workflows-disabled/website-installer-sync.yml";
 
 describe("website installer sync workflow", () => {
   const workflow = readFileSync(WORKFLOW_PATH, "utf8");

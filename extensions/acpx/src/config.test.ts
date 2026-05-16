@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { resolveAcpxPluginConfig, resolveAcpxPluginRoot } from "./config.js";
 
@@ -8,6 +9,16 @@ const requireFromTest = createRequire(import.meta.url);
 const TSX_IMPORT = requireFromTest.resolve("tsx");
 
 function expectedSourceMcpServerArgs(entrypoint: string): string[] {
+  const openClawRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+  const distEntry = path.join(
+    openClawRoot,
+    "dist",
+    "mcp",
+    path.basename(entrypoint).replace(/\.ts$/, ".js"),
+  );
+  if (fs.existsSync(distEntry)) {
+    return [distEntry];
+  }
   return ["--import", TSX_IMPORT, path.resolve(entrypoint)];
 }
 

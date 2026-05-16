@@ -164,7 +164,7 @@ describe("deliverMattermostReplyPayload", () => {
         mediaUrl,
         replyToId: "root-post",
         mediaLocalRoots: [
-          path.join(os.tmpdir(), "openclaw"),
+          process.platform === "win32" ? path.join(os.tmpdir(), "openclaw") : "/tmp/openclaw",
           path.join(stateDir, "media"),
           path.join(stateDir, "canvas"),
           path.join(stateDir, "workspace"),

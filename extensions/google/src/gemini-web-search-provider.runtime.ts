@@ -296,15 +296,23 @@ export async function executeGeminiSearch(
   }
 
   const start = Date.now();
-  const result = await runGeminiSearch({
-    query,
-    apiKey,
-    baseUrl,
-    model,
-    timeoutSeconds: resolveSearchTimeoutSeconds(searchConfig),
-    signal: context?.signal,
-    timeRangeFilter: timeRange.timeRangeFilter,
-  });
+  let result: Awaited<ReturnType<typeof runGeminiSearch>>;
+  try {
+    result = await runGeminiSearch({
+      query,
+      apiKey,
+      baseUrl,
+      model,
+      timeoutSeconds: resolveSearchTimeoutSeconds(searchConfig),
+      signal: context?.signal,
+      timeRangeFilter: timeRange.timeRangeFilter,
+    });
+  } catch (error) {
+    if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+      return { error: "aborted", message: error.message };
+    }
+    throw error;
+  }
   const payload = {
     query,
     provider: "gemini",

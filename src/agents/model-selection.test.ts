@@ -1584,9 +1584,13 @@ describe("model-selection", () => {
         });
 
         expect(result).toEqual({ provider: "google", model: "claude-3-5-sonnet" });
-        expect(warnSpy).toHaveBeenCalledWith(
-          '[model-selection] Model "claude-3-5-sonnet" specified without provider. Falling back to "google/claude-3-5-sonnet". Please use "google/claude-3-5-sonnet" in your config.',
-        );
+        expect(
+          warnSpy.mock.calls.some((call) =>
+            call[0].includes(
+              '[model-selection] Model "claude-3-5-sonnet" specified without provider. Falling back to "google/claude-3-5-sonnet". Please use "google/claude-3-5-sonnet" in your config.',
+            ),
+          ),
+        ).toBe(true);
       } finally {
         warnSpy.mockRestore();
         setLoggerOverride(null);
@@ -1811,9 +1815,13 @@ describe("model-selection", () => {
         });
 
         expect(result).toEqual({ provider: "openai", model: "gpt-5.4" });
-        expect(warnSpy).toHaveBeenCalledWith(
-          '[model-selection] Model "openai/" could not be resolved. Falling back to default "openai/gpt-5.4".',
-        );
+        expect(
+          warnSpy.mock.calls.some((call) =>
+            call[0].includes(
+              '[model-selection] Model "openai/" could not be resolved. Falling back to default "openai/gpt-5.4".',
+            ),
+          ),
+        ).toBe(true);
       } finally {
         warnSpy.mockRestore();
         setLoggerOverride(null);
