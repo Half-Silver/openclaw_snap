@@ -125,12 +125,16 @@ lmstudio_model = get_config('lmstudio-model-id')
 max_tokens = get_config('max-tokens')
 
 if model or telegram_token or telegram_allowed_users or (lmstudio_url and lmstudio_model) or max_tokens:
+    # Load existing config if it exists
     data = {}
     if os.path.exists(openclaw_json_path):
         try:
-            with open(openclaw_json_path) as f:
-                data = json.load(f)
-        except:
+            with open(openclaw_json_path, 'r') as f:
+                content = f.read()
+                if content.strip():
+                    data = json.loads(content)
+        except Exception:
+            # If parsing fails (e.g. JSON5), we try to keep going but be careful not to lose data
             pass
             
     if model:
@@ -213,6 +217,11 @@ if model or telegram_token or telegram_allowed_users or (lmstudio_url and lmstud
     with open(openclaw_json_path, 'w') as f:
         json.dump(data, f, indent=2)
 
+    def yaml_escape(s):
+        if not isinstance(s, str):
+            return s
+        return s.replace('"', '\\"').replace('\n', '\\n')
+
     def dict_to_yaml(d, indent=0):
         yaml_str = ""
         for k, v in d.items():
@@ -224,11 +233,12 @@ if model or telegram_token or telegram_allowed_users or (lmstudio_url and lmstud
                     if isinstance(item, dict):
                         yaml_str += " " * indent + "- " + dict_to_yaml(item, indent + 2).lstrip()
                     else:
-                        yaml_str += " " * indent + f"- {item}\n"
+                        val = f"\"{yaml_escape(item)}\"" if isinstance(item, str) else item
+                        yaml_str += " " * indent + f"- {val}\n"
             elif isinstance(v, bool):
                 yaml_str += " " * indent + f"{k}: {'true' if v else 'false'}\n"
             elif isinstance(v, str):
-                yaml_str += " " * indent + f"{k}: \"{v}\"\n"
+                yaml_str += " " * indent + f"{k}: \"{yaml_escape(v)}\"\n"
             else:
                 yaml_str += " " * indent + f"{k}: {v}\n"
         return yaml_str

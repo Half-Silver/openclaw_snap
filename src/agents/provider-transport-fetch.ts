@@ -131,7 +131,35 @@ function sanitizeOpenAISdkSseResponse(
       // OpenAI's SDK currently tries to JSON.parse event-only or blank-data SSE
       // messages. Drop those malformed keepalive-style blocks before it parses.
       if (hasReadableSseData(block)) {
-        controller.enqueue(encoder.encode(`${block}${separator}`));
+        let rewrittenBlock = block;
+        if (block.startsWith("data: ")) {
+          try {
+            const dataStr = block.slice(6);
+            if (dataStr.trim() !== "[DONE]") {
+              const parsed = JSON.parse(dataStr);
+              const delta = parsed.choices?.[0]?.delta;
+              if (delta && !delta.content) {
+                const reasoningFields = [
+                  "reasoning_content",
+                  "reasoning",
+                  "reasoning_text",
+                  "reasoning_summary_text",
+                ];
+                for (const field of reasoningFields) {
+                  const val = delta[field];
+                  if (typeof val === "string" && val.length > 0) {
+                    delta.content = val;
+                    rewrittenBlock = "data: " + JSON.stringify(parsed);
+                    break;
+                  }
+                }
+              }
+            }
+          } catch {
+            // Ignore parse errors
+          }
+        }
+        controller.enqueue(encoder.encode(`${rewrittenBlock}${separator}`));
       }
     }
   };
@@ -405,13 +433,23 @@ function resolveModelTransportSsrFPolicy(params: {
   if (fakeIpPolicy) {
     return {
       ...fakeIpPolicy,
-      ...(params.allowPrivateNetwork || process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "true"
+      ...(params.allowPrivateNetwork ||
+      process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "true" ||
+      process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "1" ||
+      process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "on" ||
+      process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "enabled"
         ? { allowPrivateNetwork: true }
         : {}),
     };
   }
 
-  return params.allowPrivateNetwork || process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "true"
+  const isInsecureRemoteEnabled =
+    process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "true" ||
+    process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "1" ||
+    process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "on" ||
+    process.env.OPENCLAW_SNAP_INSECURE_REMOTE === "enabled";
+
+  return params.allowPrivateNetwork || isInsecureRemoteEnabled
     ? { allowPrivateNetwork: true }
     : undefined;
 }
