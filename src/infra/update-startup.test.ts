@@ -1,6 +1,8 @@
+// Covers startup update check and auto-update behavior.
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { formatCliCommand } from "../cli/command-format.js";
 import { createSuiteTempRootTracker } from "../test-helpers/temp-dir.js";
 import { captureEnv } from "../test-utils/env.js";
 import type { UpdateCheckResult } from "./update-check.js";
@@ -57,6 +59,14 @@ describe("update-startup", () => {
   let getUpdateAvailable: (typeof import("./update-startup.js"))["getUpdateAvailable"];
   let resetUpdateAvailableStateForTest: (typeof import("./update-startup.js"))["resetUpdateAvailableStateForTest"];
   let loaded = false;
+
+  function requireFirstRunCommandCall(): Parameters<typeof runCommandWithTimeout> {
+    const [call] = vi.mocked(runCommandWithTimeout).mock.calls;
+    if (!call) {
+      throw new Error("expected update command run");
+    }
+    return call;
+  }
 
   beforeAll(async () => {
     await suiteRootTracker.setup();
@@ -226,11 +236,63 @@ describe("update-startup", () => {
     const { log, parsed } = await runUpdateCheckAndReadState(channel);
 
     expect(log.info).toHaveBeenCalledWith(
-      expect.stringContaining("update available (latest): v2.0.0"),
+      `update available (latest): v2.0.0 (current v1.0.0). Run: ${formatCliCommand("openclaw update")}`,
     );
     expect(parsed.lastNotifiedVersion).toBe("2.0.0");
     expect(parsed.lastAvailableVersion).toBe("2.0.0");
     expect(parsed.lastNotifiedTag).toBe("latest");
+  });
+
+  it("falls back when the update-check clock is outside Date range", async () => {
+    mockPackageUpdateStatus("latest", "2.0.0");
+    vi.spyOn(Date, "now").mockReturnValue(8_640_000_000_000_001);
+
+    await runGatewayUpdateCheck({
+      cfg: { update: { channel: "stable" } },
+      log: { info: vi.fn() },
+      isNixMode: false,
+      allowInTests: true,
+    });
+
+    const statePath = path.join(tempDir, "update-check.json");
+    const parsed = JSON.parse(await fs.readFile(statePath, "utf-8")) as {
+      lastCheckedAt?: string;
+      lastAvailableVersion?: string;
+    };
+    expect(parsed.lastCheckedAt).toBe("1970-01-01T00:00:00.000Z");
+    expect(parsed.lastAvailableVersion).toBe("2.0.0");
+  });
+
+  it("does not throttle invalid update-check clocks against persisted state", async () => {
+    const statePath = path.join(tempDir, "update-check.json");
+    await fs.writeFile(
+      statePath,
+      JSON.stringify(
+        {
+          lastCheckedAt: "2026-01-17T09:30:00.000Z",
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+    mockPackageUpdateStatus("latest", "2.0.0");
+    vi.spyOn(Date, "now").mockReturnValue(8_640_000_000_000_001);
+
+    await runGatewayUpdateCheck({
+      cfg: { update: { channel: "stable" } },
+      log: { info: vi.fn() },
+      isNixMode: false,
+      allowInTests: true,
+    });
+
+    expect(checkUpdateStatus).toHaveBeenCalledTimes(1);
+    const parsed = JSON.parse(await fs.readFile(statePath, "utf-8")) as {
+      lastCheckedAt?: string;
+      lastAvailableVersion?: string;
+    };
+    expect(parsed.lastCheckedAt).toBe("1970-01-01T00:00:00.000Z");
+    expect(parsed.lastAvailableVersion).toBe("2.0.0");
   });
 
   it("hydrates cached update from persisted state during throttle window", async () => {
@@ -434,7 +496,7 @@ describe("update-startup", () => {
     }
 
     expect(runCommandWithTimeout).toHaveBeenCalledTimes(1);
-    const [argv, options] = vi.mocked(runCommandWithTimeout).mock.calls[0] ?? [];
+    const [argv, options] = requireFirstRunCommandCall();
     expect(argv).toEqual([
       process.execPath,
       "/opt/openclaw/dist/entry.js",

@@ -1,3 +1,4 @@
+// Lmstudio tests cover setup plugin behavior.
 import { CUSTOM_LOCAL_AUTH_MARKER } from "openclaw/plugin-sdk/provider-auth";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/provider-auth";
 import type { ModelDefinitionConfig } from "openclaw/plugin-sdk/provider-model-shared";
@@ -11,6 +12,8 @@ import type { WizardPrompter } from "openclaw/plugin-sdk/setup";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   LMSTUDIO_DEFAULT_API_KEY_ENV_VAR,
+  LMSTUDIO_DEFAULT_INFERENCE_BASE_URL,
+  LMSTUDIO_DOCKER_HOST_INFERENCE_BASE_URL,
   LMSTUDIO_LOCAL_API_KEY_PLACEHOLDER,
 } from "./defaults.js";
 import {
@@ -204,6 +207,14 @@ function expectRecordFields(value: unknown, label: string, expected: Record<stri
   }
 }
 
+function firstMockArg(mock: { mock: { calls: Array<readonly unknown[]> } }, label: string) {
+  const call = mock.mock.calls[0];
+  if (!call) {
+    throw new Error(`expected ${label} call`);
+  }
+  return call[0];
+}
+
 function requirePathRecord(value: unknown, label: string, path: string[]): Record<string, unknown> {
   let current = value;
   for (const key of path) {
@@ -394,7 +405,7 @@ describe("lmstudio setup", () => {
     const result = await configureLmstudioNonInteractive(ctx);
 
     const setupCall = requireRecord(
-      configureSelfHostedNonInteractiveMock.mock.calls[0]?.[0],
+      firstMockArg(configureSelfHostedNonInteractiveMock, "self-hosted setup"),
       "self-hosted setup call",
     );
     const setupCtx = requireRecord(setupCall.ctx, "self-hosted setup context");
@@ -653,7 +664,7 @@ describe("lmstudio setup", () => {
 
     await configureLmstudioNonInteractive(ctx);
 
-    expectRecordFields(ctx.resolveApiKey.mock.calls[0]?.[0], "resolveApiKey options", {
+    expectRecordFields(firstMockArg(ctx.resolveApiKey, "resolveApiKey"), "resolveApiKey options", {
       flagValue: "new-lmstudio-key",
       flagName: "--lmstudio-api-key",
     });
@@ -694,14 +705,17 @@ describe("lmstudio setup", () => {
     const ctx = buildNonInteractiveContext({
       customModelId: "missing-model",
     });
+    const dockerSetup = ["1", "true", "yes", "on"].includes(
+      process.env.OPENCLAW_DOCKER_SETUP?.trim().toLowerCase() ?? "",
+    );
+    const expectedBaseUrl = dockerSetup
+      ? LMSTUDIO_DOCKER_HOST_INFERENCE_BASE_URL
+      : LMSTUDIO_DEFAULT_INFERENCE_BASE_URL;
 
     await expect(configureLmstudioNonInteractive(ctx)).resolves.toBeNull();
 
     expect(ctx.runtime.error).toHaveBeenCalledWith(
-      expect.stringContaining("LM Studio model missing-model was not found at"),
-    );
-    expect(ctx.runtime.error).toHaveBeenCalledWith(
-      expect.stringContaining("Available models: qwen3-8b-instruct"),
+      `LM Studio model missing-model was not found at ${expectedBaseUrl}.\nAvailable models: qwen3-8b-instruct`,
     );
     expect(ctx.runtime.exit).toHaveBeenCalledWith(1);
     expect(configureSelfHostedNonInteractiveMock).not.toHaveBeenCalled();
@@ -834,7 +848,10 @@ describe("lmstudio setup", () => {
       prompter,
     });
 
-    const firstTextCall = requireRecord(text.mock.calls[0]?.[0], "first text prompt");
+    const firstTextCall = requireRecord(
+      firstMockArg(text, "first text prompt"),
+      "first text prompt",
+    );
     expectRecordFields(firstTextCall, "first text prompt", {
       initialValue: "http://host.docker.internal:1234",
       placeholder: "http://host.docker.internal:1234",
@@ -1126,6 +1143,20 @@ describe("lmstudio setup", () => {
       },
     },
     {
+      name: "ignores unresolved apiKey template when Authorization header is configured",
+      providerPatch: {
+        apiKey: "${LMSTUDIO_API_KEY}",
+        headers: {
+          Authorization: "Bearer custom-token",
+        },
+      },
+      expectedProviderPatch: {
+        headers: {
+          Authorization: "Bearer custom-token",
+        },
+      },
+    },
+    {
       name: "still injects lmstudio-local when only non-auth headers are configured",
       providerPatch: {
         headers: {
@@ -1325,6 +1356,38 @@ describe("lmstudio setup", () => {
             },
           },
         } as OpenClawConfig,
+      }),
+    );
+
+    expect(discoverLmstudioModelsMock).toHaveBeenCalledWith({
+      baseUrl: "http://localhost:1234/v1",
+      apiKey: "resolved-discovery-key",
+      headers: undefined,
+      quiet: false,
+    });
+  });
+
+  it("discoverLmstudioProvider ignores an unresolved apiKey template when discoveryApiKey is resolved", async () => {
+    discoverLmstudioModelsMock.mockResolvedValueOnce([
+      createModel("qwen3-8b-instruct", "Qwen3 8B"),
+    ]);
+
+    await discoverLmstudioProvider(
+      buildDiscoveryContext({
+        discoveryApiKey: "resolved-discovery-key",
+        config: {
+          models: {
+            providers: {
+              lmstudio: {
+                baseUrl: "http://localhost:1234/v1",
+                api: "openai-completions",
+                apiKey: "${LMSTUDIO_API_KEY}",
+                models: [],
+              },
+            },
+          },
+        } as OpenClawConfig,
+        env: {},
       }),
     );
 

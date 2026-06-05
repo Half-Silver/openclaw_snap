@@ -1,3 +1,4 @@
+// Feishu tests cover client plugin behavior.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { FeishuConfigSchema } from "./config-schema.js";
 import type { ResolvedFeishuAccount } from "./types.js";
@@ -18,7 +19,7 @@ const wsClientCtorMock = vi.hoisted(() =>
   }),
 );
 const proxyAgentCtorMock = vi.hoisted(() =>
-  vi.fn(function proxyAgentCtor() {
+  vi.fn(function createAmbientNodeProxyAgent() {
     return { proxied: true };
   }),
 );
@@ -158,8 +159,16 @@ beforeAll(async () => {
     EventDispatcher: vi.fn(),
     defaultHttpInstance: mockBaseHttpInstance,
   }));
-  vi.doMock("proxy-agent", () => ({
-    ProxyAgent: proxyAgentCtorMock,
+  vi.doMock("@openclaw/proxyline", () => ({
+    createAmbientNodeProxyAgent: proxyAgentCtorMock,
+    hasAmbientNodeProxyConfigured: vi.fn(() =>
+      Boolean(
+        process.env.HTTPS_PROXY ??
+        process.env.https_proxy ??
+        process.env.HTTP_PROXY ??
+        process.env.http_proxy,
+      ),
+    ),
   }));
 
   ({
@@ -227,7 +236,7 @@ afterAll(() => {
   vi.doUnmock("./runtime.js");
   vi.doUnmock("./subagent-hooks.js");
   vi.doUnmock("@larksuiteoapi/node-sdk");
-  vi.doUnmock("proxy-agent");
+  vi.doUnmock("@openclaw/proxyline");
   vi.resetModules();
 });
 
@@ -312,6 +321,21 @@ describe("createFeishuClient HTTP timeout", () => {
     });
 
     await expectGetCallTimeout(60_000);
+  });
+
+  it("ignores non-decimal env timeout overrides", async () => {
+    for (const value of ["0x10", "1e3", "10.5"]) {
+      process.env[FEISHU_HTTP_TIMEOUT_ENV_VAR] = value;
+
+      createFeishuClient({
+        appId: `app-${value}`,
+        appSecret: "secret-env-timeout", // pragma: allowlist secret
+        accountId: `timeout-env-invalid-${value}`,
+      });
+
+      await expectGetCallTimeout(FEISHU_HTTP_TIMEOUT_MS);
+      mockBaseHttpInstance.get.mockClear();
+    }
   });
 
   it("prefers direct timeout over env override", async () => {

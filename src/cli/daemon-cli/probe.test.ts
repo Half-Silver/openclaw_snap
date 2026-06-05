@@ -1,3 +1,4 @@
+// Daemon probe tests cover gateway probe command behavior and output.
 import { describe, expect, it, vi } from "vitest";
 import { probeGatewayStatus } from "./probe.js";
 
@@ -110,6 +111,7 @@ describe("probeGatewayStatus", () => {
     }
     expect(result.server?.version).toBe("2026.5.6");
     expect(result.server?.connId).toBe("conn-1");
+    expect(result.version).toBe("2026.5.6");
   });
 
   it("uses a real status RPC when requireRpc is enabled", async () => {
@@ -189,10 +191,26 @@ describe("probeGatewayStatus", () => {
       requireRpc: true,
     });
 
-    expect(probeGatewayMock.mock.calls[0]?.[0]?.preauthHandshakeTimeoutMs).toBe(30_000);
-    expect(probeGatewayMock.mock.calls[0]?.[0]?.timeoutMs).toBe(30_000);
-    expect(callGatewayMock.mock.calls[0]?.[0]?.config).toBe(config);
-    expect(callGatewayMock.mock.calls[0]?.[0]?.timeoutMs).toBe(30_000);
+    expect(probeGatewayMock).toHaveBeenCalledWith({
+      url: "ws://127.0.0.1:19191",
+      auth: {
+        token: "temp-token",
+        password: undefined,
+      },
+      tlsFingerprint: undefined,
+      preauthHandshakeTimeoutMs: 30_000,
+      timeoutMs: 30_000,
+      includeDetails: false,
+    });
+    expect(callGatewayMock).toHaveBeenCalledWith({
+      url: "ws://127.0.0.1:19191",
+      token: "temp-token",
+      password: undefined,
+      tlsFingerprint: undefined,
+      config,
+      method: "status",
+      timeoutMs: 30_000,
+    });
   });
 
   it("falls back to read-only when the status RPC succeeds but the auth probe is inconclusive", async () => {
@@ -224,6 +242,69 @@ describe("probeGatewayStatus", () => {
         scopes: [],
         capability: "unknown",
       },
+    });
+  });
+
+  it("uses status.runtimeVersion when read-probe handshake metadata is unavailable", async () => {
+    callGatewayMock.mockReset();
+    probeGatewayMock.mockReset();
+    callGatewayMock.mockResolvedValueOnce({ runtimeVersion: "2026.4.24", status: "ok" });
+    probeGatewayMock.mockRejectedValueOnce(new Error("probe timed out after status"));
+
+    const result = await probeGatewayStatus({
+      url: "ws://127.0.0.1:19191",
+      token: "temp-token",
+      timeoutMs: 5_000,
+      requireRpc: true,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      kind: "read",
+      capability: "read_only",
+      auth: undefined,
+      version: "2026.4.24",
+    });
+  });
+
+  it("prefers read-probe server metadata over status.runtimeVersion", async () => {
+    callGatewayMock.mockReset();
+    probeGatewayMock.mockReset();
+    callGatewayMock.mockResolvedValueOnce({ runtimeVersion: "2026.4.23", status: "ok" });
+    probeGatewayMock.mockResolvedValueOnce({
+      ok: true,
+      auth: {
+        role: "operator",
+        scopes: ["operator.read"],
+        capability: "read_only",
+      },
+      server: {
+        version: "2026.4.24",
+        connId: "conn-1",
+      },
+    });
+
+    const result = await probeGatewayStatus({
+      url: "ws://127.0.0.1:19191",
+      token: "temp-token",
+      timeoutMs: 5_000,
+      requireRpc: true,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      kind: "read",
+      capability: "read_only",
+      auth: {
+        role: "operator",
+        scopes: ["operator.read"],
+        capability: "read_only",
+      },
+      server: {
+        version: "2026.4.24",
+        connId: "conn-1",
+      },
+      version: "2026.4.24",
     });
   });
 

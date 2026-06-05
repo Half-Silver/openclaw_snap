@@ -83,7 +83,9 @@ final class MacNodeModeCoordinator {
                     clientId: "openclaw-macos",
                     clientMode: "node",
                     clientDisplayName: InstanceIdentity.displayName)
-                let sessionBox = self.buildSessionBox(url: config.url)
+                let sessionBox = self.buildSessionBox(
+                    url: config.url,
+                    connectionMode: AppStateStore.shared.connectionMode)
 
                 try await self.session.connect(
                     url: config.url,
@@ -137,7 +139,10 @@ final class MacNodeModeCoordinator {
         locationMode: OpenClawLocationMode,
         connectionMode: AppState.ConnectionMode) -> [String]
     {
-        var caps: [String] = [OpenClawCapability.canvas.rawValue, OpenClawCapability.screen.rawValue]
+        var caps: [String] = [
+            OpenClawCapability.canvas.rawValue,
+            OpenClawCapability.screen.rawValue,
+        ]
         if browserControlEnabled, connectionMode == .local {
             caps.append(OpenClawCapability.browser.rawValue)
         }
@@ -243,15 +248,35 @@ final class MacNodeModeCoordinator {
         return true
     }
 
-    private func buildSessionBox(url: URL) -> WebSocketSessionBox? {
+    nonisolated static func tlsParams(
+        for url: URL,
+        connectionMode: AppState.ConnectionMode,
+        root: [String: Any],
+        storedFingerprint: String?) -> GatewayTLSParams?
+    {
+        guard url.scheme?.lowercased() == "wss" else { return nil }
+        let stableID = Self.tlsPinStoreKey(for: url)
+        let configuredFingerprint = connectionMode == .remote
+            ? GatewayRemoteConfig.resolveTLSFingerprint(root: root)
+            : nil
+        let expectedFingerprint = configuredFingerprint ?? storedFingerprint
+        return GatewayTLSParams(
+            required: true,
+            expectedFingerprint: expectedFingerprint,
+            allowTOFU: expectedFingerprint == nil,
+            storeKey: stableID)
+    }
+
+    private func buildSessionBox(url: URL, connectionMode: AppState.ConnectionMode) -> WebSocketSessionBox? {
         guard url.scheme?.lowercased() == "wss" else { return nil }
         let stableID = Self.tlsPinStoreKey(for: url)
         let stored = GatewayTLSStore.loadFingerprint(stableID: stableID)
-        let params = GatewayTLSParams(
-            required: true,
-            expectedFingerprint: stored,
-            allowTOFU: stored == nil,
-            storeKey: stableID)
+        guard let params = Self.tlsParams(
+            for: url,
+            connectionMode: connectionMode,
+            root: OpenClawConfigFile.loadDict(),
+            storedFingerprint: stored)
+        else { return nil }
         let session = GatewayTLSPinningSession(params: params)
         return WebSocketSessionBox(session: session)
     }

@@ -1,3 +1,5 @@
+// Covers rich shell-command extraction, fake parser shapes, source span mapping,
+// nested wrapper parsing, and parser error handling.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Node as TreeSitterNode, Parser, Tree } from "web-tree-sitter";
 import { explainShellCommand } from "./extract.js";
@@ -143,8 +145,10 @@ function expectRisk(
   const risk = risks.find((candidate) => riskMatches(candidate, fields)) as
     | Record<string, unknown>
     | undefined;
-  expect(risk).toBeDefined();
-  return risk ?? {};
+  if (!risk) {
+    throw new Error(`Expected risk ${JSON.stringify(fields)}`);
+  }
+  return risk;
 }
 
 afterEach(() => {

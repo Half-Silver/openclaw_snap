@@ -1,3 +1,4 @@
+// Status scan config tests cover scan command config loading and cold-start resolution.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   loadStatusScanCommandConfig,
@@ -105,7 +106,7 @@ describe("status.scan.config-shared", () => {
     });
 
     expect(result.secretDiagnostics).toEqual([
-      expect.stringContaining("OPENCLAW_GATEWAY_TOKEN conflicts with gateway.auth.token"),
+      "OPENCLAW_GATEWAY_TOKEN conflicts with gateway.auth.token: Remove OPENCLAW_GATEWAY_TOKEN from the shell, ~/.openclaw/.env, or launchctl env if gateway.auth.token is intended, or point gateway.auth.token at ${OPENCLAW_GATEWAY_TOKEN} if the env var should be canonical.",
     ]);
   });
 

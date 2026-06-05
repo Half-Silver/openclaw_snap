@@ -1,10 +1,13 @@
+// Qa Lab plugin module implements suite summary behavior.
 import type { QaProviderMode } from "./model-selection.js";
+import type { RuntimeId, RuntimeParityResult } from "./runtime-parity.js";
 
 type QaSuiteSummaryScenario = {
   name: string;
   status: "pass" | "fail";
   steps: unknown[];
   details?: string;
+  runtimeParity?: RuntimeParityResult;
 };
 
 export type QaSuiteSummaryJson = {
@@ -21,6 +24,19 @@ export type QaSuiteSummaryJson = {
     gatewayProcessRssStartBytes?: number | null;
     gatewayProcessRssEndBytes?: number | null;
     gatewayProcessRssDeltaBytes?: number | null;
+    gatewayProcessRssPeakBytes?: number | null;
+    gatewayProcessRssPeakDeltaBytes?: number | null;
+    gatewayProcessRssSamples?: Array<{
+      label: string;
+      at: string;
+      gatewayProcessRssBytes: number;
+    }>;
+    gatewayHeapSnapshots?: Array<{
+      label: string;
+      at: string;
+      path: string;
+      bytes: number;
+    }>;
   };
   run: {
     startedAt: string;
@@ -35,6 +51,7 @@ export type QaSuiteSummaryJson = {
     fastMode: boolean;
     concurrency: number;
     scenarioIds: string[] | null;
+    runtimePair?: [RuntimeId, RuntimeId] | null;
   };
 };
 

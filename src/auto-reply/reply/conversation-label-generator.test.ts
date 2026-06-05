@@ -1,3 +1,4 @@
+/** Tests generated conversation labels for reply sessions. */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const completeSimple = vi.hoisted(() => vi.fn());
@@ -8,9 +9,9 @@ const resolveDefaultModelForAgent = vi.hoisted(() => vi.fn());
 const resolveModelAsync = vi.hoisted(() => vi.fn());
 const prepareModelForSimpleCompletion = vi.hoisted(() => vi.fn());
 
-vi.mock("@earendil-works/pi-ai", async () => {
+vi.mock("../../llm/stream.js", async () => {
   const original =
-    await vi.importActual<typeof import("@earendil-works/pi-ai")>("@earendil-works/pi-ai");
+    await vi.importActual<typeof import("../../llm/stream.js")>("../../llm/stream.js");
   return {
     ...original,
     completeSimple,
@@ -25,7 +26,7 @@ vi.mock("../../agents/model-selection.js", () => ({
   resolveDefaultModelForAgent,
 }));
 
-vi.mock("../../agents/pi-embedded-runner/model.js", () => ({
+vi.mock("../../agents/embedded-agent-runner/model.js", () => ({
   resolveModelAsync,
 }));
 
@@ -38,6 +39,14 @@ vi.mock("../../plugins/runtime/runtime-model-auth.runtime.js", () => ({
 }));
 
 import { generateConversationLabel } from "./conversation-label-generator.js";
+
+function requireFirstMockCall<T>(mock: { mock: { calls: T[][] } }, label: string): T[] {
+  const call = mock.mock.calls.at(0);
+  if (!call) {
+    throw new Error(`expected ${label} call`);
+  }
+  return call;
+}
 
 describe("generateConversationLabel", () => {
   beforeEach(() => {
@@ -108,10 +117,7 @@ describe("generateConversationLabel", () => {
     });
 
     expect(completeSimple).toHaveBeenCalledOnce();
-    const call = completeSimple.mock.calls[0];
-    if (!call) {
-      throw new Error("expected simple completion call");
-    }
+    const call = requireFirstMockCall(completeSimple, "simple completion");
     expect(call[0]).toStrictEqual({ provider: "openai" });
     expect(call[1]).toStrictEqual({
       systemPrompt: "Generate a label",
@@ -130,9 +136,9 @@ describe("generateConversationLabel", () => {
   });
 
   it("omits temperature for Codex Responses simple completions", async () => {
-    resolveDefaultModelForAgent.mockReturnValue({ provider: "openai-codex", model: "gpt-5.5" });
+    resolveDefaultModelForAgent.mockReturnValue({ provider: "openai", model: "gpt-5.5" });
     resolveModelAsync.mockResolvedValue({
-      model: { provider: "openai-codex", api: "openai-codex-responses" },
+      model: { provider: "openai", api: "openai-chatgpt-responses" },
       authStorage: {},
       modelRegistry: {},
     });
@@ -144,7 +150,7 @@ describe("generateConversationLabel", () => {
     });
 
     expect(completeSimple).toHaveBeenCalledOnce();
-    const options = completeSimple.mock.calls[0]?.[2];
+    const options = requireFirstMockCall(completeSimple, "simple completion")[2];
     if (!options) {
       throw new Error("expected simple completion options");
     }

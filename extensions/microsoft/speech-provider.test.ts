@@ -1,3 +1,4 @@
+// Microsoft tests cover speech provider plugin behavior.
 import { mkdtempSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -24,6 +25,28 @@ import {
 import * as ttsModule from "./tts.js";
 
 const TEST_CFG = {} as OpenClawConfig;
+
+function requireFirstEdgeTtsCall(edgeSpy: ReturnType<typeof vi.spyOn>): {
+  config?: unknown;
+  outputPath: string;
+  text?: string;
+  timeoutMs?: number;
+} {
+  const [call] = edgeSpy.mock.calls;
+  if (!call) {
+    throw new Error("expected Microsoft Edge TTS call");
+  }
+  const [edgeCall] = call;
+  if (!edgeCall || typeof edgeCall !== "object" || Array.isArray(edgeCall)) {
+    throw new Error("expected Microsoft Edge TTS call");
+  }
+  return edgeCall as {
+    config?: unknown;
+    outputPath: string;
+    text?: string;
+    timeoutMs?: number;
+  };
+}
 
 describe("listMicrosoftVoices", () => {
   const proxyReset = installDebugProxyTestResetHooks();
@@ -101,17 +124,20 @@ describe("listMicrosoftVoices", () => {
     });
 
     await listMicrosoftVoices();
-    await new Promise((resolve) => setTimeout(resolve, 0));
 
-    const events = store.getSessionEvents("ms-voices-session", 10);
-    expect(
-      events.some((event) => event.kind === "request" && event.host === "speech.platform.bing.com"),
-    ).toBe(true);
-    expect(
-      events.some(
-        (event) => event.kind === "response" && event.host === "speech.platform.bing.com",
-      ),
-    ).toBe(true);
+    await vi.waitFor(() => {
+      const events = store.getSessionEvents("ms-voices-session", 10);
+      expect(
+        events.some(
+          (event) => event.kind === "request" && event.host === "speech.platform.bing.com",
+        ),
+      ).toBe(true);
+      expect(
+        events.some(
+          (event) => event.kind === "response" && event.host === "speech.platform.bing.com",
+        ),
+      ).toBe(true);
+    });
   });
 
   it("does not double-capture voice discovery when the global fetch patch is installed", async () => {
@@ -143,12 +169,14 @@ describe("listMicrosoftVoices", () => {
 
     try {
       await listMicrosoftVoices();
-      await new Promise((resolve) => setTimeout(resolve, 0));
 
-      const events = store
-        .getSessionEvents("ms-voices-global-session", 10)
-        .filter((event) => event.host === "speech.platform.bing.com");
-      expect(events).toHaveLength(2);
+      let events: Array<Record<string, unknown>> = [];
+      await vi.waitFor(() => {
+        events = store
+          .getSessionEvents("ms-voices-global-session", 10)
+          .filter((event) => event.host === "speech.platform.bing.com");
+        expect(events).toHaveLength(2);
+      });
       const kinds = events.map((event) => String(event.kind)).toSorted();
       expect(kinds).toEqual(["request", "response"]);
     } finally {
@@ -208,10 +236,7 @@ describe("buildMicrosoftSpeechProvider", () => {
     });
 
     expect(edgeSpy).toHaveBeenCalledOnce();
-    const edgeCall = edgeSpy.mock.calls[0]?.[0];
-    if (!edgeCall) {
-      throw new Error("expected Microsoft Edge TTS call");
-    }
+    const edgeCall = requireFirstEdgeTtsCall(edgeSpy);
     expect(edgeCall.text).toBe("你好，这是一个测试 hello");
     expect(path.basename(edgeCall.outputPath)).toBe("speech.mp3");
     expect(edgeCall.timeoutMs).toBe(1000);
@@ -253,10 +278,7 @@ describe("buildMicrosoftSpeechProvider", () => {
     });
 
     expect(edgeSpy).toHaveBeenCalledOnce();
-    const edgeCall = edgeSpy.mock.calls[0]?.[0];
-    if (!edgeCall) {
-      throw new Error("expected Microsoft Edge TTS call");
-    }
+    const edgeCall = requireFirstEdgeTtsCall(edgeSpy);
     expect(edgeCall.text).toBe("你好，这是一个测试 hello");
     expect(path.basename(edgeCall.outputPath)).toBe("speech.mp3");
     expect(edgeCall.timeoutMs).toBe(1000);

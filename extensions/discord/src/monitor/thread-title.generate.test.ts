@@ -1,3 +1,4 @@
+// Discord tests cover thread title.generate plugin behavior.
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import * as agentRuntimeModule from "openclaw/plugin-sdk/simple-completion-runtime";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +11,16 @@ const prepareSimpleCompletionModelForAgentMock =
 const extractAssistantTextMock = vi.fn<typeof agentRuntimeModule.extractAssistantText>();
 
 let generateThreadTitle: typeof import("./thread-title.js").generateThreadTitle;
+
+function firstCompletionArgs(): Parameters<
+  typeof agentRuntimeModule.completeWithPreparedSimpleCompletionModel
+>[0] {
+  const firstCall = completeWithPreparedSimpleCompletionModelMock.mock.calls.at(0);
+  if (!firstCall) {
+    throw new Error("expected completion call");
+  }
+  return firstCall[0];
+}
 
 beforeAll(async () => {
   ({ generateThreadTitle } = await import("./thread-title.js"));
@@ -162,10 +173,7 @@ describe("generateThreadTitle", () => {
 
     expect(result).toBe("Generated title");
     expect(completeWithPreparedSimpleCompletionModelMock).toHaveBeenCalledTimes(1);
-    const completionArgs = completeWithPreparedSimpleCompletionModelMock.mock.calls[0]?.[0];
-    if (!completionArgs) {
-      throw new Error("expected completion call");
-    }
+    const completionArgs = firstCompletionArgs();
     expect(completionArgs.context).toEqual({
       systemPrompt:
         "Generate a concise Discord thread title (3-6 words). Return only the title. Use channel context when provided and avoid redundant channel-name words unless needed for clarity.",

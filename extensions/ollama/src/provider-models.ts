@@ -1,3 +1,4 @@
+// Ollama provider module implements model/runtime integration.
 import type { ModelProviderConfig } from "openclaw/plugin-sdk/provider-model-shared";
 import type { ModelDefinitionConfig } from "openclaw/plugin-sdk/provider-onboard";
 import { fetchWithSsrFGuard } from "openclaw/plugin-sdk/ssrf-runtime";
@@ -255,7 +256,7 @@ export function buildOllamaModelDefinition(
       : capabilities.includes("thinking"));
   const compat =
     capabilities === undefined
-      ? { supportsUsageInStreaming: true }
+      ? { supportsTools: true, supportsUsageInStreaming: true }
       : {
           supportsTools: capabilities.includes("tools"),
           supportsUsageInStreaming: true,

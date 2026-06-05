@@ -1,3 +1,4 @@
+// Matrix tests cover file sync store plugin behavior.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -214,7 +215,7 @@ describe("FileBackedMatrixSyncStore", () => {
     await vi.advanceTimersByTimeAsync(1);
     await Promise.resolve();
     expect(writeSpy).toHaveBeenCalledTimes(1);
-    expect(writeSpy.mock.calls[0]).toEqual([
+    expect(writeSpy.mock.calls.at(0)).toEqual([
       storagePath,
       {
         version: 1,

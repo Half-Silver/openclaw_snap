@@ -1,7 +1,9 @@
+// Tests APNS push signing and request construction.
 import { generateKeyPairSync } from "node:crypto";
 import { createServer, type Server as HttpServer } from "node:http";
 import http2 from "node:http2";
 import net from "node:net";
+import { MAX_TIMER_TIMEOUT_MS } from "@openclaw/normalization-core/number-coercion";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startProxy, stopProxy, type ProxyHandle } from "./net/proxy/proxy-lifecycle.js";
 import {
@@ -165,8 +167,6 @@ async function closeServer(server: HttpServer | http2.Http2SecureServer): Promis
 }
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
-  expect(typeof value).toBe("object");
-  expect(value).not.toBeNull();
   if (typeof value !== "object" || value === null) {
     throw new Error(`${label} was not an object`);
   }
@@ -186,7 +186,11 @@ function expectNoProperties(record: Record<string, unknown>, keys: string[]) {
 }
 
 function requireSendRequest(send: ReturnType<typeof vi.fn>, label = "APNs send request") {
-  const request = send.mock.calls[0]?.[0];
+  const [call] = send.mock.calls;
+  if (!call) {
+    throw new Error(`expected ${label}`);
+  }
+  const [request] = call;
   return requireRecord(request, label);
 }
 
@@ -318,7 +322,7 @@ describe("push APNs send semantics", () => {
   it("routes direct APNs HTTP/2 requests through the active managed proxy", async () => {
     const apnsServer = await startFakeApnsServer();
     const proxy = await startConnectProxy(apnsServer.port);
-    let proxyHandle: ProxyHandle | null = null;
+    let proxyHandle: ProxyHandle | null | undefined;
     const previousTlsRejectUnauthorized = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
@@ -363,7 +367,7 @@ describe("push APNs send semantics", () => {
       } else {
         process.env.NODE_TLS_REJECT_UNAUTHORIZED = previousTlsRejectUnauthorized;
       }
-      await stopProxy(proxyHandle);
+      await stopProxy(proxyHandle ?? null);
       await proxy.stop();
       await apnsServer.stop();
     }
@@ -518,7 +522,7 @@ describe("push APNs send semantics", () => {
       timeoutMs: 50,
     });
 
-    expect(send.mock.calls[0]?.[0]?.timeoutMs).toBe(1000);
+    expect(requireSendRequest(send).timeoutMs).toBe(1000);
     expectRecordFields(requireRecord(result, "APNs result"), {
       ok: false,
       status: 400,
@@ -527,6 +531,30 @@ describe("push APNs send semantics", () => {
       tokenSuffix: "abcd1234",
       transport: "direct",
     });
+  });
+
+  it("caps oversized direct send timeouts", async () => {
+    const { send, registration, auth } = createDirectApnsSendFixture({
+      nodeId: "ios-node-direct-timeout-cap",
+      environment: "sandbox",
+      sendResult: {
+        status: 200,
+        apnsId: "apns-timeout-cap-id",
+        body: "{}",
+      },
+    });
+
+    await sendApnsAlert({
+      registration,
+      nodeId: "ios-node-direct-timeout-cap",
+      title: "Wake",
+      body: "Ping",
+      auth,
+      requestSender: send,
+      timeoutMs: Number.MAX_SAFE_INTEGER,
+    });
+
+    expect(requireSendRequest(send).timeoutMs).toBe(MAX_TIMER_TIMEOUT_MS);
   });
 
   it("fails closed before sending when direct registrations carry invalid topics", async () => {
@@ -572,8 +600,7 @@ describe("push APNs send semantics", () => {
       requestSender: send,
     });
 
-    const sent = send.mock.calls[0]?.[0];
-    const payload = requirePayload(requireRecord(sent, "APNs send request"));
+    const payload = requirePayload(requireSendRequest(send));
     expectRecordFields(requireRecord(payload.openclaw, "openclaw payload"), {
       kind: "node.wake",
       reason: "node.invoke",
@@ -700,8 +727,7 @@ describe("push APNs send semantics", () => {
       relayRequestSender: send,
     });
 
-    const sent = send.mock.calls[0]?.[0];
-    const payload = requirePayload(requireRecord(sent, "APNs send request"));
+    const payload = requirePayload(requireSendRequest(send));
     expect(payload.aps).toEqual({
       alert: {
         title: "Exec approval required",

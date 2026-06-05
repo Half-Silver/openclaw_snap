@@ -1,3 +1,5 @@
+// Subagent registry persistence-resume tests cover restoring disk-backed child
+// runs after restart and resuming their completion announce flow.
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -33,6 +35,8 @@ vi.mock("./subagent-registry.store.js", async () => {
   );
   const fsSync = await import("node:fs");
   const pathSync = await import("node:path");
+  // The test redirects registry persistence to a temp file while still using
+  // the real store shape so restart code exercises serialized run records.
   const resolvePath = () => hoisted.registryPath ?? actual.resolveSubagentRegistryPath();
   return {
     ...actual,
@@ -110,7 +114,7 @@ describe("subagent registry persistence resume", () => {
       startedAt: 111,
       endedAt: 222,
     });
-    mod.__testing.setDepsForTest({
+    mod.testing.setDepsForTest({
       ...createSubagentRegistryTestDeps({
         callGateway: vi.mocked(callGatewayModule.callGateway),
         captureSubagentCompletionReply: vi.fn(async () => undefined),
@@ -123,7 +127,7 @@ describe("subagent registry persistence resume", () => {
 
   afterEach(async () => {
     announceSpy.mockClear();
-    mod.__testing.setDepsForTest();
+    mod.testing.setDepsForTest();
     mod.resetSubagentRegistryForTests({ persist: false });
     await drainSessionStoreWriterQueuesForTest();
     clearSessionStoreCacheForTest();
@@ -137,6 +141,8 @@ describe("subagent registry persistence resume", () => {
   });
 
   it("persists runs to disk and resumes after restart", async () => {
+    // Persisted requesterOrigin is the current contract; legacy flat requester
+    // channel/account fields should not reappear during resume.
     tempStateDir = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-subagent-"));
     process.env.OPENCLAW_STATE_DIR = tempStateDir;
     const registryPath = path.join(tempStateDir, "subagents", "runs.json");

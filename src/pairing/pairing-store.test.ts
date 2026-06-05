@@ -1,3 +1,4 @@
+// Tests persisted pairing store lifecycle and challenge lookup.
 import crypto from "node:crypto";
 import fsSync from "node:fs";
 import os from "node:os";
@@ -299,6 +300,44 @@ async function expectPendingPairingRequestsIsolatedByAccount(params: {
 }
 
 describe("pairing store", () => {
+  it("skips malformed persisted pairing requests while approving valid codes", async () => {
+    await withTempStateDir(async (stateDir) => {
+      const now = new Date().toISOString();
+      writeJsonFixture(resolvePairingFilePath(stateDir, "telegram"), {
+        version: 1,
+        requests: [
+          {
+            id: "bad-code",
+            code: { nested: "bad" },
+            createdAt: now,
+            lastSeenAt: now,
+          },
+          {
+            id: "1001",
+            code: "ABCDEFGH",
+            createdAt: now,
+            lastSeenAt: now,
+            meta: {
+              accountId: "yy",
+              ignored: { nested: "bad" },
+            },
+          },
+        ],
+      });
+
+      await expect(
+        approveChannelPairingCode({
+          channel: "telegram",
+          code: "ABCDEFGH",
+          accountId: "yy",
+        }),
+      ).resolves.toMatchObject({ id: "1001" });
+      await expect(readChannelAllowFromStore("telegram", process.env, "yy")).resolves.toEqual([
+        "1001",
+      ]);
+    });
+  });
+
   it("handles pending pairing request lifecycle and limits", async () => {
     await withTempStateDir(async (stateDir) => {
       const first = await upsertChannelPairingRequest({

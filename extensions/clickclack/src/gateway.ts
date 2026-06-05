@@ -1,5 +1,10 @@
+/**
+ * Gateway loop for polling ClickClack backlog events, opening the realtime
+ * websocket, and dispatching user messages into OpenClaw.
+ */
 import type { ChannelGatewayContext } from "openclaw/plugin-sdk/channel-contract";
 import type { RawData } from "ws";
+import { resolveClickClackInboundAccess } from "./access.js";
 import { resolveClickClackAccount } from "./accounts.js";
 import { createClickClackClient } from "./http-client.js";
 import { handleClickClackInbound } from "./inbound.js";
@@ -26,6 +31,8 @@ async function resolveEventMessage(params: {
   }
   const directConversationId = payloadString(params.event, "direct_conversation_id");
   if (directConversationId && typeof params.event.seq === "number") {
+    // ClickClack event payloads carry ids and cursors; fetch a narrow window
+    // around the sequence so the message body/author fields stay authoritative.
     const messages = await params.client.directMessages(
       directConversationId,
       params.event.seq - 1,
@@ -65,6 +72,14 @@ function decodeSocketMessage(data: RawData): string {
   return Buffer.concat(data).toString("utf8");
 }
 
+function parseSocketEvent(data: RawData): ClickClackEvent | null {
+  try {
+    return JSON.parse(decodeSocketMessage(data)) as ClickClackEvent;
+  } catch {
+    return null;
+  }
+}
+
 async function processEvent(params: {
   account: ResolvedClickClackAccount;
   config: CoreConfig;
@@ -85,14 +100,27 @@ async function processEvent(params: {
   if (message.author?.kind === "bot") {
     return;
   }
-  await handleClickClackInbound({ account: params.account, config: params.config, message });
+  const access = await resolveClickClackInboundAccess({
+    account: params.account,
+    config: params.config,
+    message,
+  });
+  if (!access.shouldDispatch) {
+    return;
+  }
+  await handleClickClackInbound({
+    account: params.account,
+    config: params.config,
+    message,
+    access,
+  });
 }
 
 export async function startClickClackGatewayAccount(
   ctx: ChannelGatewayContext<ResolvedClickClackAccount>,
 ) {
   const configuredAccount = resolveClickClackAccount({
-    cfg: ctx.cfg as CoreConfig,
+    cfg: ctx.cfg,
     accountId: ctx.account.accountId,
   });
   if (!configuredAccount.configured) {
@@ -121,6 +149,8 @@ export async function startClickClackGatewayAccount(
   while (!ctx.abortSignal.aborted) {
     const backlog = await client.events(workspaceId, afterCursor);
     if (!initialized) {
+      // First pass establishes the cursor without replaying historical backlog
+      // into fresh gateway sessions.
       for (const event of backlog) {
         afterCursor = event.cursor || afterCursor;
       }
@@ -130,7 +160,7 @@ export async function startClickClackGatewayAccount(
         afterCursor = event.cursor || afterCursor;
         await processEvent({
           account,
-          config: ctx.cfg as CoreConfig,
+          config: ctx.cfg,
           client,
           event,
           botUserId: account.botUserId,
@@ -146,11 +176,15 @@ export async function startClickClackGatewayAccount(
       ctx.abortSignal.addEventListener("abort", abort, { once: true });
       socket.on("message", (data) => {
         void (async () => {
-          const event = JSON.parse(decodeSocketMessage(data)) as ClickClackEvent;
+          const event = parseSocketEvent(data);
+          if (!event) {
+            ctx.log?.warn?.(`[${account.accountId}] skipped malformed ClickClack websocket event`);
+            return;
+          }
           afterCursor = event.cursor || afterCursor;
           await processEvent({
             account,
-            config: ctx.cfg as CoreConfig,
+            config: ctx.cfg,
             client,
             event,
             botUserId: account.botUserId ?? "",
@@ -164,7 +198,9 @@ export async function startClickClackGatewayAccount(
       socket.on("error", reject);
     });
     if (!ctx.abortSignal.aborted) {
-      await new Promise((resolve) => setTimeout(resolve, account.reconnectMs));
+      await new Promise((resolve) => {
+        setTimeout(resolve, account.reconnectMs);
+      });
     }
   }
   ctx.setStatus({ accountId: account.accountId, running: false });

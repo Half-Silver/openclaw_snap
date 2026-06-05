@@ -1,6 +1,7 @@
+/** Text and JSON rendering for the gateway status command. */
+import { colorize, theme } from "../../../packages/terminal-core/src/theme.js";
 import type { RuntimeEnv } from "../../runtime.js";
 import { writeRuntimeJson } from "../../runtime.js";
-import { colorize, theme } from "../../terminal/theme.js";
 import { serializeGatewayDiscoveryBeacon } from "./discovery.js";
 import {
   isProbeReachable,
@@ -12,6 +13,7 @@ import {
 } from "./helpers.js";
 import type { GatewayStatusProbedTarget } from "./probe-run.js";
 
+/** Warning emitted when gateway status finds degraded or surprising probe state. */
 export type GatewayStatusWarning = {
   code: string;
   message: string;
@@ -38,6 +40,7 @@ function readModelPricingDegradedDetail(health: unknown): string | null {
     : "pricing bootstrap or refresh failed";
 }
 
+/** Chooses the reachable target that best represents the user's requested gateway. */
 export function pickPrimaryProbedTarget(probed: GatewayStatusProbedTarget[]) {
   const reachable = probed.filter((entry) => isProbeReachable(entry.probe));
   return (
@@ -49,6 +52,7 @@ export function pickPrimaryProbedTarget(probed: GatewayStatusProbedTarget[]) {
   );
 }
 
+/** Builds operator-facing warnings from probe, discovery, and SSH tunnel results. */
 export function buildGatewayStatusWarnings(params: {
   probed: GatewayStatusProbedTarget[];
   sshTarget: string | null;
@@ -88,6 +92,8 @@ export function buildGatewayStatusWarnings(params: {
     });
   }
   if (reachable.length > 1) {
+    // Multiple reachable gateways are valid for isolated profiles but surprising
+    // enough to call out before users debug against the wrong process.
     warnings.push({
       code: "multiple_gateways",
       message:
@@ -130,13 +136,14 @@ export function buildGatewayStatusWarnings(params: {
     }
     warnings.push({
       code: "model_pricing_degraded",
-      message: `Model pricing degraded: ${detail}`,
+      message: `Model pricing warning: optional pricing refresh degraded: ${detail}`,
       targetIds: [result.target.id],
     });
   }
   return warnings;
 }
 
+/** Writes the machine-readable gateway status payload and exits nonzero when unreachable. */
 export function writeGatewayStatusJson(params: {
   runtime: RuntimeEnv;
   startedAt: number;
@@ -149,9 +156,7 @@ export function writeGatewayStatusJson(params: {
   primaryTargetId: string | null;
 }) {
   const reachable = params.probed.filter((entry) => isProbeReachable(entry.probe));
-  const degraded =
-    params.probed.some((entry) => isPostConnectProbeFailure(entry.probe)) ||
-    reachable.some((entry) => readModelPricingDegradedDetail(entry.probe.health));
+  const degraded = params.probed.some((entry) => isPostConnectProbeFailure(entry.probe));
   const capability = summarizeGatewayProbeCapability(reachable.map((entry) => entry.probe));
   writeRuntimeJson(params.runtime, {
     ok: reachable.length > 0,
@@ -195,6 +200,7 @@ export function writeGatewayStatusJson(params: {
   }
 }
 
+/** Writes the human-readable gateway status report and exits nonzero when unreachable. */
 export function writeGatewayStatusText(params: {
   runtime: RuntimeEnv;
   rich: boolean;

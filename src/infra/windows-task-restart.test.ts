@@ -1,3 +1,4 @@
+// Covers Windows scheduled-task gateway restart script generation.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -43,6 +44,14 @@ function decodeCmdPathArg(value: string): string {
   const withoutQuotes =
     trimmed.startsWith('"') && trimmed.endsWith('"') ? trimmed.slice(1, -1) : trimmed;
   return withoutQuotes.replace(/\^!/g, "!").replace(/%%/g, "%");
+}
+
+function requireFirstMockCall<T>(mock: { mock: { calls: T[][] } }, label: string): T[] {
+  const call = mock.mock.calls[0];
+  if (!call) {
+    throw new Error(`expected ${label} call`);
+  }
+  return call;
 }
 
 afterEach(() => {
@@ -96,10 +105,10 @@ describe("relaunchGatewayScheduledTask", () => {
     expect(result.method).toBe("schtasks");
     expect(result.tried).toContain('schtasks /Run /TN "OpenClaw Gateway (work)"');
     expect(result.tried).toContain(`cmd.exe /d /s /c ${seenCommandArg}`);
-    const spawnCall = spawnMock.mock.calls[0];
-    expect(spawnCall?.[0]).toBe("cmd.exe");
-    expect(spawnCall?.[1]).toStrictEqual(["/d", "/s", "/c", seenCommandArg]);
-    expect(spawnCall?.[2]).toStrictEqual({
+    const spawnCall = requireFirstMockCall(spawnMock, "restart helper spawn");
+    expect(spawnCall[0]).toBe("cmd.exe");
+    expect(spawnCall[1]).toStrictEqual(["/d", "/s", "/c", seenCommandArg]);
+    expect(spawnCall[2]).toStrictEqual({
       detached: true,
       stdio: "ignore",
       windowsHide: true,
@@ -182,10 +191,7 @@ describe("relaunchGatewayScheduledTask", () => {
     relaunchGatewayScheduledTask({ OPENCLAW_PROFILE: "work" });
 
     expect(spawnMock).toHaveBeenCalledOnce();
-    const spawnCall = spawnMock.mock.calls[0];
-    if (!spawnCall) {
-      throw new Error("expected restart helper spawn call");
-    }
+    const spawnCall = requireFirstMockCall(spawnMock, "restart helper spawn");
     const commandArgs = spawnCall[1];
     if (!Array.isArray(commandArgs)) {
       throw new Error("expected cmd.exe argument array");

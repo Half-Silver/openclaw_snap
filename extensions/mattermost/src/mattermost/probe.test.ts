@@ -1,3 +1,5 @@
+// Mattermost tests cover probe plugin behavior.
+import { MAX_TIMER_TIMEOUT_MS } from "openclaw/plugin-sdk/number-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { probeMattermost } from "./probe.js";
 
@@ -13,6 +15,19 @@ vi.mock("openclaw/plugin-sdk/ssrf-runtime", async () => {
   >;
   return { ...original, fetchWithSsrFGuard: mockFetchGuard };
 });
+
+function requireFirstFetchCall() {
+  const [call] = mockFetchGuard.mock.calls;
+  if (!call) {
+    throw new Error("expected Mattermost probe fetch call");
+  }
+  return call[0] as {
+    url?: string;
+    init?: { headers?: unknown; signal?: unknown };
+    auditContext?: string;
+    policy?: unknown;
+  };
+}
 
 describe("probeMattermost", () => {
   beforeEach(() => {
@@ -43,7 +58,7 @@ describe("probeMattermost", () => {
 
     const result = await probeMattermost("https://mm.example.com/api/v4/", "bot-token");
 
-    const [fetchCall] = mockFetchGuard.mock.calls[0] ?? [];
+    const fetchCall = requireFirstFetchCall();
     expect(fetchCall?.url).toBe("https://mm.example.com/api/v4/users/me");
     expect(fetchCall?.init?.headers).toStrictEqual({ Authorization: "Bearer bot-token" });
     expect(fetchCall?.init?.signal).toBeInstanceOf(AbortSignal);
@@ -70,8 +85,26 @@ describe("probeMattermost", () => {
 
     await probeMattermost("https://mm.example.com", "bot-token", 2500, true);
 
-    const [fetchCall] = mockFetchGuard.mock.calls[0] ?? [];
+    const fetchCall = requireFirstFetchCall();
     expect(fetchCall?.policy).toStrictEqual({ allowPrivateNetwork: true });
+  });
+
+  it("clamps oversized probe timeouts before scheduling", async () => {
+    mockFetchGuard.mockResolvedValueOnce({
+      response: new Response(JSON.stringify({ id: "bot-1" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+      release: mockRelease,
+    });
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    try {
+      await probeMattermost("https://mm.example.com", "bot-token", Number.MAX_SAFE_INTEGER);
+
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), MAX_TIMER_TIMEOUT_MS);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
   });
 
   it("returns API error details from JSON response", async () => {

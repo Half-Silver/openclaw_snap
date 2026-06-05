@@ -1,3 +1,4 @@
+// Imessage tests cover deliver plugin behavior.
 import type { RuntimeEnv } from "openclaw/plugin-sdk/runtime-env";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -237,11 +238,12 @@ describe("deliverReplies", () => {
     });
   });
 
-  it("records the actual sent placeholder for media-only replies", async () => {
+  it("records the internal echo key for media-only replies", async () => {
     const remember = vi.fn();
     sendMessageIMessageMock.mockResolvedValueOnce({
       messageId: "imsg-media-1",
-      sentText: "<media:image>",
+      sentText: "",
+      echoText: "<media:image>",
     });
 
     await deliverReplies({

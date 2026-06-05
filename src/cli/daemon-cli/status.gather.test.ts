@@ -1,8 +1,11 @@
+// Daemon status gather tests cover service status collection from platform state.
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { StaleOpenClawUpdateLaunchdJob } from "../../daemon/launchd.js";
 import { createMockGatewayService } from "../../daemon/service.test-helpers.js";
+import type { PortConnections } from "../../infra/ports.js";
 import type { GatewayRestartHandoff } from "../../infra/restart-handoff.js";
 import { captureEnv } from "../../test-utils/env.js";
 import { VERSION } from "../../version.js";
@@ -15,6 +18,7 @@ const callGatewayStatusProbe = vi.fn<
     url?: string;
     error?: string | null;
     server?: { version?: string | null; connId?: string | null };
+    version?: string | null;
   }>
 >(async (_opts?: unknown) => ({
   ok: true,
@@ -28,13 +32,29 @@ const loadGatewayTlsRuntime = vi.fn(async (_cfg?: unknown) => ({
   fingerprintSha256: "sha256:11:22:33:44",
 }));
 const findExtraGatewayServices = vi.fn(async (_env?: unknown, _opts?: unknown) => []);
+const findStaleOpenClawUpdateLaunchdJobs = vi.fn<
+  (env?: NodeJS.ProcessEnv) => Promise<StaleOpenClawUpdateLaunchdJob[]>
+>(async () => []);
 const inspectPortUsage = vi.fn(async (port: number) => ({
   port,
   status: "free" as const,
   listeners: [],
   hints: [],
 }));
+const inspectPortConnections = vi.fn<(port: number) => Promise<PortConnections>>(
+  async (port: number) => ({
+    port,
+    connections: [],
+  }),
+);
 const readLastGatewayErrorLine = vi.fn(async (_env?: NodeJS.ProcessEnv) => null);
+const loadInstalledPluginIndexInstallRecords = vi.fn<
+  (params?: {
+    env?: NodeJS.ProcessEnv;
+    stateDir?: string;
+    filePath?: string;
+  }) => Promise<Record<string, unknown>>
+>(async (_params?) => ({}));
 const readGatewayRestartHandoffSync = vi.fn<
   (_env?: NodeJS.ProcessEnv) => GatewayRestartHandoff | null
 >(() => null);
@@ -139,6 +159,11 @@ vi.mock("../../daemon/inspect.js", () => ({
   findExtraGatewayServices: (env: unknown, opts?: unknown) => findExtraGatewayServices(env, opts),
 }));
 
+vi.mock("../../daemon/launchd.js", () => ({
+  findStaleOpenClawUpdateLaunchdJobs: (env?: NodeJS.ProcessEnv) =>
+    findStaleOpenClawUpdateLaunchdJobs(env),
+}));
+
 vi.mock("../../daemon/service-audit.js", () => ({
   auditGatewayServiceConfig: (opts: unknown) => auditGatewayServiceConfig(opts),
 }));
@@ -158,6 +183,7 @@ vi.mock("../../gateway/net.js", () => ({
 }));
 
 vi.mock("../../infra/ports.js", () => ({
+  inspectPortConnections: (port: number) => inspectPortConnections(port),
   inspectPortUsage: (port: number) => inspectPortUsage(port),
   formatPortDiagnostics: () => [],
 }));
@@ -178,14 +204,24 @@ vi.mock("./probe.js", () => ({
   probeGatewayStatus: (opts: unknown) => callGatewayStatusProbe(opts),
 }));
 
+vi.mock("../../plugins/installed-plugin-index-record-reader.js", () => ({
+  loadInstalledPluginIndexInstallRecords: (params?: {
+    env?: NodeJS.ProcessEnv;
+    stateDir?: string;
+    filePath?: string;
+  }) => loadInstalledPluginIndexInstallRecords(params),
+}));
+
 vi.mock("./restart-health.js", () => ({
   inspectGatewayRestart: (opts: unknown) => inspectGatewayRestart(opts),
 }));
 
 function callArg(mock: { mock: { calls: unknown[][] } }, index = 0): unknown {
   const call = mock.mock.calls[index];
-  expect(call).toBeDefined();
-  return call?.[0];
+  if (!call) {
+    throw new Error(`Expected mock call ${index}`);
+  }
+  return call[0];
 }
 
 describe("gatherDaemonStatus", () => {
@@ -208,8 +244,13 @@ describe("gatherDaemonStatus", () => {
     delete process.env.DAEMON_GATEWAY_PASSWORD;
     callGatewayStatusProbe.mockClear();
     createConfigIOCalls.mockClear();
+    findStaleOpenClawUpdateLaunchdJobs.mockReset();
+    findStaleOpenClawUpdateLaunchdJobs.mockResolvedValue([]);
+    loadInstalledPluginIndexInstallRecords.mockClear();
+    loadInstalledPluginIndexInstallRecords.mockResolvedValue({});
     loadGatewayTlsRuntime.mockClear();
     inspectGatewayRestart.mockClear();
+    inspectPortConnections.mockClear();
     readGatewayRestartHandoffSync.mockClear();
     readConfigFileSnapshotCalls.mockClear();
     loadConfigCalls.mockClear();
@@ -251,6 +292,7 @@ describe("gatherDaemonStatus", () => {
     expect(probeInput.token).toBe("daemon-token");
     expect(status.gateway?.probeUrl).toBe("wss://127.0.0.1:19001");
     expect(status.gateway?.tlsEnabled).toBe(true);
+    expect(status.gateway?.version).toBe("2026.5.6");
     expect(status.rpc?.url).toBe("wss://127.0.0.1:19001");
     expect(status.rpc?.ok).toBe(true);
     expect(status.rpc?.server).toEqual({ version: "2026.5.6", connId: "conn-1" });
@@ -259,6 +301,25 @@ describe("gatherDaemonStatus", () => {
       expect(status.cli?.entrypoint).toBe(process.argv[1]);
     }
     expect(inspectGatewayRestart).not.toHaveBeenCalled();
+  });
+
+  it("falls back to probe version when server metadata is unavailable", async () => {
+    callGatewayStatusProbe.mockResolvedValueOnce({
+      ok: true,
+      url: "ws://127.0.0.1:19001",
+      error: null,
+      version: "2026.5.7",
+    });
+
+    const status = await gatherDaemonStatus({
+      rpc: {},
+      probe: true,
+      deep: false,
+    });
+
+    expect(status.gateway?.version).toBe("2026.5.7");
+    expect(status.rpc?.version).toBe("2026.5.7");
+    expect(status.rpc?.server).toBeUndefined();
   });
 
   it("forwards requireRpc and configPath to the daemon probe", async () => {
@@ -353,6 +414,8 @@ describe("gatherDaemonStatus", () => {
     expect(probeInput.tlsFingerprint).toBeUndefined();
     expect(status.gateway?.probeUrl).toBe("wss://override.example:18790");
     expect(status.rpc?.url).toBe("wss://override.example:18790");
+    expect(loadInstalledPluginIndexInstallRecords).not.toHaveBeenCalled();
+    expect(status.pluginVersionDrift).toBeUndefined();
   });
 
   it("uses fallback network details when interface discovery throws during status inspection", async () => {
@@ -438,6 +501,51 @@ describe("gatherDaemonStatus", () => {
     expect(status.service.restartHandoff?.supervisorMode).toBe("launchd");
   });
 
+  it.runIf(process.platform === "darwin")(
+    "surfaces stale updater launchd jobs only during deep status",
+    async () => {
+      serviceReadCommand.mockResolvedValueOnce({
+        programArguments: ["/bin/node", "cli", "gateway", "--port", "19001"],
+        environment: {
+          OPENCLAW_STATE_DIR: "/tmp/openclaw-daemon",
+          OPENCLAW_CONFIG_PATH: "/tmp/openclaw-daemon/openclaw.json",
+          OPENCLAW_LAUNCHD_LABEL: "ai.openclaw.manual-update.gateway",
+        },
+      });
+      findStaleOpenClawUpdateLaunchdJobs.mockResolvedValueOnce([
+        {
+          label: "ai.openclaw.update.2026.5.12",
+          lastExitStatus: 127,
+        },
+        {
+          label: "ai.openclaw.manual-update.1717168800",
+          lastExitStatus: 0,
+        },
+      ]);
+
+      const status = await gatherDaemonStatus({
+        rpc: {},
+        probe: false,
+        deep: true,
+      });
+
+      const staleScanEnv = findStaleOpenClawUpdateLaunchdJobs.mock.calls[0]?.[0];
+      expect(staleScanEnv?.OPENCLAW_STATE_DIR).toBe("/tmp/openclaw-daemon");
+      expect(staleScanEnv?.OPENCLAW_CONFIG_PATH).toBe("/tmp/openclaw-daemon/openclaw.json");
+      expect(staleScanEnv?.OPENCLAW_LAUNCHD_LABEL).toBe("ai.openclaw.manual-update.gateway");
+      expect(status.service.staleUpdateLaunchdJobs).toEqual([
+        {
+          label: "ai.openclaw.update.2026.5.12",
+          lastExitStatus: 127,
+        },
+        {
+          label: "ai.openclaw.manual-update.1717168800",
+          lastExitStatus: 0,
+        },
+      ]);
+    },
+  );
+
   it("does not read restart handoffs during normal status", async () => {
     await gatherDaemonStatus({
       rpc: {},
@@ -446,6 +554,62 @@ describe("gatherDaemonStatus", () => {
     });
 
     expect(readGatewayRestartHandoffSync).not.toHaveBeenCalled();
+    expect(findStaleOpenClawUpdateLaunchdJobs).not.toHaveBeenCalled();
+    expect(inspectPortConnections).not.toHaveBeenCalled();
+  });
+
+  it("surfaces established gateway connections during deep status", async () => {
+    inspectPortConnections.mockResolvedValueOnce({
+      port: 19001,
+      connections: [
+        {
+          pid: 4242,
+          ppid: 1,
+          command: "node",
+          commandLine: "node /tmp/newer-openclaw/dist/index.js logs --follow",
+          address: "TCP 127.0.0.1:50123->127.0.0.1:19001 (ESTABLISHED)",
+          direction: "client",
+        },
+      ],
+    });
+
+    const status = await gatherDaemonStatus({
+      rpc: {},
+      probe: false,
+      deep: true,
+    });
+
+    expect(inspectPortConnections).toHaveBeenCalledWith(19001);
+    expect(status.connections?.established).toEqual([
+      {
+        pid: 4242,
+        ppid: 1,
+        command: "node",
+        commandLine: "node /tmp/newer-openclaw/dist/index.js logs --follow",
+        address: "TCP 127.0.0.1:50123->127.0.0.1:19001 (ESTABLISHED)",
+        direction: "client",
+      },
+    ]);
+  });
+
+  it("skips established gateway connection scans for remote gateway status", async () => {
+    daemonLoadedConfig = {
+      gateway: {
+        mode: "remote",
+        remote: { url: "wss://gateway.example" },
+      },
+    };
+
+    const status = await gatherDaemonStatus({
+      rpc: {},
+      probe: false,
+      deep: true,
+    });
+
+    expect(inspectPortConnections).not.toHaveBeenCalled();
+    expect(loadInstalledPluginIndexInstallRecords).not.toHaveBeenCalled();
+    expect(status.connections).toBeUndefined();
+    expect(status.pluginVersionDrift).toBeUndefined();
   });
 
   it("uses the fast config path for plain same-file status reads", async () => {
@@ -757,5 +921,102 @@ describe("gatherDaemonStatus", () => {
       healthy: false,
       staleGatewayPids: [9000],
     });
+  });
+
+  it("compares plugin drift against the running gateway version from the probe, not the CLI VERSION", async () => {
+    // Gateway is still running an older version than the invoking CLI.
+    // An npm plugin pinned to the running gateway version must NOT be
+    // reported as drifted just because the CLI package is newer.
+    callGatewayStatusProbe.mockResolvedValueOnce({
+      ok: true,
+      url: "ws://127.0.0.1:19001",
+      error: null,
+      server: { version: "2026.5.4", connId: "c1" },
+    } as never);
+    loadInstalledPluginIndexInstallRecords.mockResolvedValueOnce({
+      whatsapp: {
+        source: "npm",
+        resolvedName: "@openclaw/whatsapp",
+        resolvedVersion: "2026.5.4",
+      },
+    } as never);
+
+    const status = await gatherDaemonStatus({
+      rpc: {},
+      probe: true,
+      deep: true,
+    });
+
+    expect(status.pluginVersionDrift?.gatewayVersion).toBe("2026.5.4");
+    expect(status.pluginVersionDrift?.drifts).toEqual([]);
+  });
+
+  it("flags drift against the running gateway version when an npm plugin lags behind it", async () => {
+    callGatewayStatusProbe.mockResolvedValueOnce({
+      ok: true,
+      url: "ws://127.0.0.1:19001",
+      error: null,
+      server: { version: "2026.5.4", connId: "c1" },
+    } as never);
+    loadInstalledPluginIndexInstallRecords.mockResolvedValueOnce({
+      whatsapp: {
+        source: "npm",
+        resolvedName: "@openclaw/whatsapp",
+        resolvedVersion: "2026.5.3",
+      },
+    } as never);
+
+    const status = await gatherDaemonStatus({
+      rpc: {},
+      probe: true,
+      deep: true,
+    });
+
+    expect(status.pluginVersionDrift?.gatewayVersion).toBe("2026.5.4");
+    expect(status.pluginVersionDrift?.drifts.map((d) => d.pluginId)).toEqual(["whatsapp"]);
+  });
+
+  it("reads install records from the merged daemon service environment, not the CLI process env", async () => {
+    await gatherDaemonStatus({
+      rpc: {},
+      probe: true,
+      deep: true,
+    });
+
+    // The mock daemon service command sets OPENCLAW_STATE_DIR=/tmp/openclaw-daemon,
+    // distinct from the CLI process OPENCLAW_STATE_DIR=/tmp/openclaw-cli. Drift
+    // detection must inspect the daemon profile's install records.
+    expect(loadInstalledPluginIndexInstallRecords).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          OPENCLAW_STATE_DIR: "/tmp/openclaw-daemon",
+        }),
+      }),
+    );
+  });
+
+  it("reads install records and computes drift outside deep mode", async () => {
+    loadInstalledPluginIndexInstallRecords.mockResolvedValueOnce({
+      whatsapp: {
+        source: "npm",
+        resolvedName: "@openclaw/whatsapp",
+        resolvedVersion: "2026.5.3",
+      },
+    } as never);
+
+    const status = await gatherDaemonStatus({
+      rpc: {},
+      probe: true,
+      deep: false,
+    });
+
+    expect(loadInstalledPluginIndexInstallRecords).toHaveBeenCalledWith(
+      expect.objectContaining({
+        env: expect.objectContaining({
+          OPENCLAW_STATE_DIR: "/tmp/openclaw-daemon",
+        }),
+      }),
+    );
+    expect(status.pluginVersionDrift?.drifts.map((d) => d.pluginId)).toEqual(["whatsapp"]);
   });
 });

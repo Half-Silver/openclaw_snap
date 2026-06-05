@@ -1,3 +1,4 @@
+// Covers JSON file load/save behavior.
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -172,7 +173,9 @@ describe("json-file helpers", () => {
         } catch (error) {
           saveError = error;
         }
-        expect(saveError).toBeDefined();
+        if (saveError === undefined) {
+          throw new Error("Expected saveJsonFile to fail");
+        }
         expect((saveError as { code?: unknown }).code).toBe("ENOENT");
         expect(fs.existsSync(missingTargetDir)).toBe(false);
         expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);

@@ -1,3 +1,4 @@
+// Auth-choice plugin provider tests cover loaded provider setup, plugin install, and credential routing.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyAuthChoiceLoadedPluginProvider,
@@ -41,9 +42,10 @@ vi.mock("../plugins/provider-auth-choices.js", () => ({
   resolveManifestProviderAuthChoice,
 }));
 
-const upsertAuthProfile = vi.hoisted(() => vi.fn());
+const upsertAuthProfile = vi.hoisted(() => vi.fn(() => ({ version: 1, profiles: {} })));
 vi.mock("../agents/auth-profiles.js", () => ({
   upsertAuthProfile,
+  upsertAuthProfileWithLock: upsertAuthProfile,
 }));
 
 const resolveDefaultAgentId = vi.hoisted(() => vi.fn(() => "default"));
@@ -461,7 +463,10 @@ describe("applyAuthChoiceLoadedPluginProvider", () => {
     const result = await applyAuthChoiceLoadedPluginProvider(buildParams());
 
     expect(ensureOnboardingPluginInstalled).toHaveBeenCalledOnce();
-    const [installParams] = ensureOnboardingPluginInstalled.mock.calls[0];
+    const [installParams] = ensureOnboardingPluginInstalled.mock.calls[0] ?? [];
+    if (installParams === undefined) {
+      throw new Error("expected plugin install params");
+    }
     expect(installParams.entry?.pluginId).toBe("local-provider-plugin");
     expect(installParams.entry?.label).toBe(LOCAL_PROVIDER_LABEL);
     expect(installParams.workspaceDir).toBe("/tmp/workspace");

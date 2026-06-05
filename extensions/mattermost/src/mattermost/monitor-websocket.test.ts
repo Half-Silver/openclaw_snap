@@ -1,3 +1,4 @@
+// Mattermost tests cover monitor websocket plugin behavior.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeEnv } from "../../runtime-api.js";
 import {
@@ -236,7 +237,7 @@ describe("mattermost websocket monitor", () => {
       post_id: "post-1",
       emoji_name: "thumbsup",
     });
-    const payload = onReaction.mock.calls[0]?.[0];
+    const payload = onReaction.mock.calls.at(0)?.[0];
     expect(payload).toEqual({
       event: "reaction_added",
       data: { reaction },

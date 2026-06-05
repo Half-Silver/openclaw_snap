@@ -1,3 +1,4 @@
+// Tests context passed to session lifecycle hooks.
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -31,7 +32,7 @@ vi.mock("../../agents/harness/registry.js", () => ({
   resetRegisteredAgentHarnessSessions: sessionCleanupMocks.resetRegisteredAgentHarnessSessions,
 }));
 
-vi.mock("../../agents/pi-bundle-mcp-tools.js", () => ({
+vi.mock("../../agents/agent-bundle-mcp-tools.js", () => ({
   retireSessionMcpRuntime: sessionCleanupMocks.retireSessionMcpRuntime,
 }));
 
@@ -136,12 +137,31 @@ async function initStoredSessionState(params: {
 }
 
 function expectFields(value: unknown, expected: Record<string, unknown>): void {
-  expect(value).toBeTypeOf("object");
-  expect(value).not.toBeNull();
+  if (!value || typeof value !== "object") {
+    throw new Error("expected fields object");
+  }
   const record = value as Record<string, unknown>;
   for (const [key, expectedValue] of Object.entries(expected)) {
     expect(record[key], key).toEqual(expectedValue);
   }
+}
+
+function requireHookCall(
+  mock: ReturnType<typeof vi.fn>,
+  label: string,
+): readonly [Record<string, unknown>, Record<string, unknown> | undefined] {
+  const call = mock.mock.calls[0];
+  if (!call) {
+    throw new Error(`expected ${label} hook call`);
+  }
+  const [event, context] = call;
+  if (!event || typeof event !== "object") {
+    throw new Error(`expected ${label} hook event`);
+  }
+  if (context !== undefined && (!context || typeof context !== "object")) {
+    throw new Error(`expected ${label} hook context`);
+  }
+  return [event as Record<string, unknown>, context as Record<string, unknown> | undefined];
 }
 
 describe("session hook context wiring", () => {
@@ -176,7 +196,7 @@ describe("session hook context wiring", () => {
     });
 
     expect(hookRunnerMocks.runSessionStart).toHaveBeenCalledTimes(1);
-    const [event, context] = hookRunnerMocks.runSessionStart.mock.calls[0] ?? [];
+    const [event, context] = requireHookCall(hookRunnerMocks.runSessionStart, "session_start");
     expectFields(event, { sessionKey });
     expectFields(context, { sessionKey, agentId: "main", sessionId: event?.sessionId });
   });
@@ -198,7 +218,7 @@ describe("session hook context wiring", () => {
 
     expect(hookRunnerMocks.runSessionEnd).toHaveBeenCalledTimes(1);
     expect(hookRunnerMocks.runSessionStart).toHaveBeenCalledTimes(1);
-    const [event, context] = hookRunnerMocks.runSessionEnd.mock.calls[0] ?? [];
+    const [event, context] = requireHookCall(hookRunnerMocks.runSessionEnd, "session_end");
     expectFields(event, {
       sessionKey,
       reason: "new",
@@ -207,7 +227,10 @@ describe("session hook context wiring", () => {
     expectFields(context, { sessionKey, agentId: "main", sessionId: event?.sessionId });
     expect(event?.sessionFile).toContain(".jsonl.reset.");
 
-    const [startEvent, startContext] = hookRunnerMocks.runSessionStart.mock.calls[0] ?? [];
+    const [startEvent, startContext] = requireHookCall(
+      hookRunnerMocks.runSessionStart,
+      "session_start",
+    );
     expectFields(startEvent, { resumedFrom: "old-session" });
     expect(event?.nextSessionId).toBe(startEvent?.sessionId);
     expectFields(startContext, { sessionId: startEvent?.sessionId });
@@ -229,7 +252,7 @@ describe("session hook context wiring", () => {
       commandAuthorized: true,
     });
 
-    const [event] = hookRunnerMocks.runSessionEnd.mock.calls[0] ?? [];
+    const [event] = requireHookCall(hookRunnerMocks.runSessionEnd, "session_end");
     expectFields(event, { reason: "reset" });
   });
 
@@ -254,7 +277,7 @@ describe("session hook context wiring", () => {
       commandAuthorized: true,
     });
 
-    const [event] = hookRunnerMocks.runSessionEnd.mock.calls[0] ?? [];
+    const [event] = requireHookCall(hookRunnerMocks.runSessionEnd, "session_end");
     expectFields(event, { reason: "new" });
   });
 
@@ -271,8 +294,8 @@ describe("session hook context wiring", () => {
         updatedAt: new Date(2026, 0, 18, 3, 0, 0).getTime(),
       });
 
-      const [event] = hookRunnerMocks.runSessionEnd.mock.calls[0] ?? [];
-      const [startEvent] = hookRunnerMocks.runSessionStart.mock.calls[0] ?? [];
+      const [event] = requireHookCall(hookRunnerMocks.runSessionEnd, "session_end");
+      const [startEvent] = requireHookCall(hookRunnerMocks.runSessionStart, "session_start");
       expectFields(event, {
         reason: "daily",
         transcriptArchived: true,
@@ -301,7 +324,7 @@ describe("session hook context wiring", () => {
         },
       });
 
-      const [event] = hookRunnerMocks.runSessionEnd.mock.calls[0] ?? [];
+      const [event] = requireHookCall(hookRunnerMocks.runSessionEnd, "session_end");
       expectFields(event, { reason: "idle" });
     } finally {
       vi.useRealTimers();
@@ -326,7 +349,7 @@ describe("session hook context wiring", () => {
         },
       });
 
-      const [event] = hookRunnerMocks.runSessionEnd.mock.calls[0] ?? [];
+      const [event] = requireHookCall(hookRunnerMocks.runSessionEnd, "session_end");
       expectFields(event, { reason: "idle" });
     } finally {
       vi.useRealTimers();

@@ -1,3 +1,4 @@
+// Imessage tests cover monitor.watch subscribe retry plugin behavior.
 import type { waitForTransportReady } from "openclaw/plugin-sdk/transport-ready-runtime";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { createIMessageRpcClient, IMessageRpcClient } from "./client.js";
@@ -109,7 +110,7 @@ describe("monitorIMessageProvider watch.subscribe startup retry", () => {
       { timeoutMs: 10_000 },
     );
     expect(runtime.log).toHaveBeenCalledTimes(1);
-    expect(String(runtime.log.mock.calls[0][0])).toContain(
+    expect(String(runtime.log.mock.calls[0]?.[0])).toContain(
       "imessage: watch.subscribe startup failed (attempt 1/3): Error: imsg rpc timeout (watch.subscribe); retrying",
     );
     expect(
@@ -132,7 +133,7 @@ describe("monitorIMessageProvider watch.subscribe startup retry", () => {
     const monitorErrorPromise = monitorIMessageProvider({
       config: { channels: { imessage: {} } } as never,
       runtime: runtime as never,
-    }).catch((error) => error);
+    }).catch((error: unknown) => error);
 
     await vi.runAllTimersAsync();
     const monitorError = await monitorErrorPromise;
@@ -141,7 +142,7 @@ describe("monitorIMessageProvider watch.subscribe startup retry", () => {
     expect((monitorError as Error).message).toContain("imsg rpc timeout (watch.subscribe)");
     expect(createIMessageRpcClientMock).toHaveBeenCalledTimes(3);
     expect(runtime.error).toHaveBeenCalledTimes(1);
-    expect(String(runtime.error.mock.calls[0][0])).toContain(
+    expect(String(runtime.error.mock.calls[0]?.[0])).toContain(
       "imessage: monitor failed: Error: imsg rpc timeout (watch.subscribe)",
     );
   });

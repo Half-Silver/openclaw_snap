@@ -1,3 +1,4 @@
+// Covers native approval runtime delivery and resolution.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChannelApprovalNativeAdapter } from "../channels/plugins/types.adapters.js";
 import { clearApprovalNativeRouteStateForTest } from "./approval-native-route-coordinator.js";
@@ -21,9 +22,9 @@ afterEach(() => {
 });
 
 function requireRecord(value: unknown): Record<string, unknown> {
-  expect(value).toBeTruthy();
-  expect(typeof value).toBe("object");
-  expect(Array.isArray(value)).toBe(false);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Expected a non-array record");
+  }
   return value as Record<string, unknown>;
 }
 

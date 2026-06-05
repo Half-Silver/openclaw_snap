@@ -1,3 +1,4 @@
+// Codex tests cover plugin activation plugin behavior.
 import { describe, expect, it, vi } from "vitest";
 import { CodexAppInventoryCache } from "./app-inventory-cache.js";
 import { CODEX_PLUGINS_MARKETPLACE_NAME, type ResolvedCodexPluginPolicy } from "./config.js";
@@ -180,9 +181,11 @@ describe("Codex plugin activation", () => {
       reason: "installed",
       installAttempted: true,
     });
-    expect(result.diagnostics).toContainEqual({
-      message: "Codex app inventory refresh skipped: app/list unavailable",
-    });
+    expect(result.diagnostics).toEqual([
+      {
+        message: "Codex app inventory refresh skipped: app/list unavailable",
+      },
+    ]);
     expect(appCache.getRevision()).toBeGreaterThan(0);
   });
 
@@ -210,9 +213,11 @@ describe("Codex plugin activation", () => {
       reason: "refresh_failed",
       installAttempted: true,
     });
-    expect(result.diagnostics).toContainEqual({
-      message: "Codex plugin runtime refresh failed after install: skills/list unavailable",
-    });
+    expect(result.diagnostics).toEqual([
+      {
+        message: "Codex plugin runtime refresh failed after install: skills/list unavailable",
+      },
+    ]);
   });
 
   it("installs from a remote curated marketplace when no local marketplace path is present", async () => {

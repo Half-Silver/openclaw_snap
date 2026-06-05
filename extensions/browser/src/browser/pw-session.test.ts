@@ -1,3 +1,4 @@
+// Browser tests cover pw session plugin behavior.
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "playwright-core";
@@ -53,6 +54,18 @@ function fakePage(): {
   } as unknown as Page;
 
   return { page, handlers, mocks: { on, getByRole, frameLocator, locator } };
+}
+
+function firstSavePath(saveAs: MutableDownload["saveAs"]): string {
+  const [call] = saveAs.mock.calls;
+  if (!call) {
+    throw new Error("Expected saveAs call");
+  }
+  const [savedPath] = call;
+  if (typeof savedPath !== "string") {
+    throw new Error("Expected saved download path");
+  }
+  return savedPath;
 }
 
 describe("pw-session refLocator", () => {
@@ -166,13 +179,11 @@ describe("pw-session ensurePageState", () => {
     expect(path.dirname(managedPathB ?? "")).toBe(DEFAULT_DOWNLOAD_DIR);
     expect(path.basename(managedPathA ?? "")).toMatch(/-report\.pdf$/);
     expect(path.basename(managedPathB ?? "")).toMatch(/-report\.pdf$/);
-    expect(saveAsA.mock.calls[0]?.[0]).not.toBe(managedPathA);
-    expect(saveAsB.mock.calls[0]?.[0]).not.toBe(managedPathB);
-    for (const call of [saveAsA.mock.calls[0], saveAsB.mock.calls[0]]) {
-      const savedPath = call?.[0];
-      if (typeof savedPath !== "string") {
-        throw new Error("Expected saved download path");
-      }
+    const savedPathA = firstSavePath(saveAsA);
+    const savedPathB = firstSavePath(saveAsB);
+    expect(savedPathA).not.toBe(managedPathA);
+    expect(savedPathB).not.toBe(managedPathB);
+    for (const savedPath of [savedPathA, savedPathB]) {
       expect(savedPath.length).toBeGreaterThan(0);
       const savedParentName = path.basename(path.dirname(savedPath));
       expect(
@@ -202,7 +213,9 @@ describe("pw-session ensurePageState", () => {
 
     try {
       handlers.get("download")?.[0]?.(download);
-      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => {
+        setImmediate(resolve);
+      });
 
       expect(unhandled).toStrictEqual([]);
       await expect(download.path?.()).rejects.toThrow("save failed");

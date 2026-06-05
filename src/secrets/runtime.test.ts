@@ -1,3 +1,4 @@
+/** Tests runtime SecretRef resolution across core config and auth-profile surfaces. */
 import { describe, expect, it } from "vitest";
 import { asConfig, setupSecretsRuntimeSnapshotTestHooks } from "./runtime.test-support.ts";
 
@@ -11,7 +12,9 @@ function expectWarning(
   const warning = snapshot.warnings.find(
     (entry) => entry.code === expected.code && entry.path === expected.path,
   );
-  expect(warning).toBeDefined();
+  if (!warning) {
+    throw new Error(`Expected warning ${expected.code} ${expected.path}`);
+  }
 }
 
 describe("secrets runtime snapshot", () => {

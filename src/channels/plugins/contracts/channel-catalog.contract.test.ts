@@ -1,3 +1,4 @@
+// Channel catalog contract tests cover bundled and registry-backed channel catalog invariants.
 import {
   describeBundledMetadataOnlyChannelCatalogContract,
   describeChannelCatalogEntryContract,
@@ -39,7 +40,7 @@ describeOfficialFallbackChannelCatalogContract({
 
 describeChannelCatalogEntryContract({
   channelId: "wecom",
-  npmSpec: "@wecom/wecom-openclaw-plugin@2026.4.23",
+  npmSpec: "@wecom/wecom-openclaw-plugin@2026.5.7",
   alias: "wework",
 });
 

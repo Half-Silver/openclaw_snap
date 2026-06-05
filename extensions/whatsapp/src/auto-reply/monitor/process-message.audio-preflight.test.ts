@@ -1,3 +1,4 @@
+// Whatsapp tests cover process message.audio preflight plugin behavior.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock the lazy-loaded audio preflight runtime boundary
@@ -66,6 +67,7 @@ vi.mock("./runtime-api.js", () => ({
   buildHistoryContextFromEntries: (_p: { currentMessage: string }) => _p.currentMessage,
   createChannelMessageReplyPipeline: () => ({ onModelSelected: undefined }),
   formatInboundEnvelope: (p: { body: string }) => p.body,
+  isControlCommandMessage: () => false,
   logVerbose: () => {},
   normalizeE164: (v: string) => v,
   readStoreAllowFromForDmPolicy: async () => [],

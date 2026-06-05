@@ -1,10 +1,11 @@
-import type { StreamFn } from "@earendil-works/pi-agent-core";
+// Verifies plugin text transforms rewrite prompts and streamed assistant output.
+import type { StreamFn } from "openclaw/plugin-sdk/agent-core";
 import {
   createAssistantMessageEventStream,
   type AssistantMessage,
   type Context,
   type Model,
-} from "@earendil-works/pi-ai";
+} from "openclaw/plugin-sdk/llm";
 import { describe, expect, it } from "vitest";
 import {
   applyPluginTextReplacements,
@@ -20,6 +21,7 @@ const model = {
 } as Model<"openai-responses">;
 
 function makeAssistantMessage(text: string): AssistantMessage {
+  // Output transform tests need a complete assistant message with visible text.
   return {
     role: "assistant",
     content: [{ type: "text", text }],
@@ -47,8 +49,13 @@ describe("plugin text transforms", () => {
       { input: [{ from: /paper ticket/g, to: "digital ticket" }] },
     );
 
-    expect(merged?.input).toHaveLength(2);
-    expect(merged?.output).toHaveLength(1);
+    expect(merged).toStrictEqual({
+      input: [
+        { from: /red basket/g, to: "blue basket" },
+        { from: /paper ticket/g, to: "digital ticket" },
+      ],
+      output: [{ from: /blue basket/g, to: "red basket" }],
+    });
     expect(applyPluginTextReplacements("red basket paper ticket", merged?.input)).toBe(
       "blue basket digital ticket",
     );
@@ -101,6 +108,7 @@ describe("plugin text transforms", () => {
   });
 
   it("wraps stream functions with inbound and outbound replacements", async () => {
+    // The wrapper mutates text-only blocks while preserving non-text content.
     let capturedContext: Context | undefined;
     const baseStreamFn: StreamFn = (_model, context) => {
       capturedContext = context;

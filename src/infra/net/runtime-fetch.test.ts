@@ -1,3 +1,5 @@
+// Runtime fetch tests cover header normalization and FormData conversion before
+// calls reach undici's dispatcher-aware fetch.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchWithRuntimeDispatcher } from "./runtime-fetch.js";
 import { TEST_UNDICI_RUNTIME_DEPS_KEY } from "./undici-runtime.js";
@@ -41,11 +43,15 @@ class MockProxyAgent {
 }
 
 function requireFetchInit(mock: ReturnType<typeof vi.fn>): RequestInit {
-  const init = mock.mock.calls[0]?.[1] as RequestInit | undefined;
-  if (!init) {
+  const [call] = mock.mock.calls;
+  if (!call) {
+    throw new Error("expected runtime fetch call");
+  }
+  const init = call[1];
+  if (typeof init !== "object" || init === null || Array.isArray(init)) {
     throw new Error("expected runtime fetch init");
   }
-  return init;
+  return init as RequestInit;
 }
 
 afterEach(() => {

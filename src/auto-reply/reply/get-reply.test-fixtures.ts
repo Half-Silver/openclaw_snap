@@ -1,3 +1,4 @@
+// Shared get-reply test fixtures for sessions, directives, and mocked runtimes.
 import { expect, vi, type Mock } from "vitest";
 import type { MsgContext } from "../templating.js";
 
@@ -86,6 +87,8 @@ export function createGetReplyContinueDirectivesResult(params: {
   commandSource: string;
   senderIsOwner: boolean;
   resetHookTriggered: boolean;
+  provider?: string;
+  model?: string;
 }) {
   return {
     kind: "continue" as const,
@@ -122,8 +125,8 @@ export function createGetReplyContinueDirectivesResult(params: {
       blockStreamingEnabled: false,
       blockReplyChunking: undefined,
       resolvedBlockStreamingBreak: undefined,
-      provider: "openai",
-      model: "gpt-4o-mini",
+      provider: params.provider ?? "openai",
+      model: params.model ?? "gpt-4o-mini",
       modelState: {
         resolveDefaultThinkingLevel: async () => undefined,
         resolveThinkingCatalog: async () => [],
@@ -159,7 +162,7 @@ export function expectResolvedTelegramTimezone(
   userTimezone = "America/New_York",
 ): void {
   expect(resolveReplyDirectives).toHaveBeenCalledTimes(1);
-  const call = resolveReplyDirectives.mock.calls[0]?.[0] as
+  const call = resolveReplyDirectives.mock.calls.at(0)?.[0] as
     | {
         cfg?: {
           channels?: { telegram?: { botToken?: unknown } };

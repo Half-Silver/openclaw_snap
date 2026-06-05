@@ -1,3 +1,4 @@
+// Qa Channel tests cover inbound plugin behavior.
 import { createPluginRuntimeMock } from "openclaw/plugin-sdk/channel-test-helpers";
 import { describe, expect, it, vi } from "vitest";
 import { setQaChannelRuntime } from "../api.js";
@@ -46,6 +47,14 @@ function createQaInboundParams(
   };
 }
 
+function firstRunAssembledParams(runtime: ReturnType<typeof createPluginRuntimeMock>) {
+  const call = vi.mocked(runtime.channel.inbound.dispatchReply).mock.calls[0];
+  if (!call) {
+    throw new Error("expected assembled turn call");
+  }
+  return call[0];
+}
+
 describe("isHttpMediaUrl", () => {
   it("accepts only http and https urls", () => {
     expect(isHttpMediaUrl("https://example.com/image.png")).toBe(true);
@@ -77,13 +86,10 @@ describe("handleQaInbound", () => {
       }),
     );
 
-    expect(runtime.channel.turn.runAssembled).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(runtime.channel.turn.runAssembled).mock.calls[0]?.[0].replyPipeline).toEqual(
-      {},
-    );
-    expect(
-      vi.mocked(runtime.channel.turn.runAssembled).mock.calls[0]?.[0].ctxPayload.WasMentioned,
-    ).toBe(true);
+    expect(runtime.channel.inbound.dispatchReply).toHaveBeenCalledTimes(1);
+    const assembled = firstRunAssembledParams(runtime);
+    expect(assembled.replyPipeline).toEqual({});
+    expect(assembled.ctxPayload.WasMentioned).toBe(true);
   });
 
   it("drops direct messages outside the configured sender allowlist", async () => {
@@ -98,7 +104,7 @@ describe("handleQaInbound", () => {
       }),
     );
 
-    expect(runtime.channel.turn.runAssembled).not.toHaveBeenCalled();
+    expect(runtime.channel.inbound.dispatchReply).not.toHaveBeenCalled();
   });
 
   it("allows direct messages from configured senders", async () => {
@@ -113,10 +119,35 @@ describe("handleQaInbound", () => {
       }),
     );
 
-    expect(runtime.channel.turn.runAssembled).toHaveBeenCalledTimes(1);
-    const ctxPayload = vi.mocked(runtime.channel.turn.runAssembled).mock.calls[0]?.[0].ctxPayload;
+    expect(runtime.channel.inbound.dispatchReply).toHaveBeenCalledTimes(1);
+    const ctxPayload = firstRunAssembledParams(runtime).ctxPayload;
     expect(ctxPayload?.CommandAuthorized).toBe(true);
     expect(ctxPayload?.SenderId).toBe("alice");
+  });
+
+  it("skips malformed inline attachment base64 without dropping the message", async () => {
+    const runtime = createPluginRuntimeMock();
+    setQaChannelRuntime(runtime);
+
+    await handleQaInbound(
+      createQaInboundParams({
+        message: {
+          attachments: [
+            {
+              id: "attachment-1",
+              kind: "image",
+              mimeType: "image/png",
+              contentBase64: "AAA@@@",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(runtime.channel.inbound.dispatchReply).toHaveBeenCalledTimes(1);
+    const ctxPayload = firstRunAssembledParams(runtime).ctxPayload;
+    expect(ctxPayload.MediaPath).toBeUndefined();
+    expect(ctxPayload.MediaPaths).toBeUndefined();
   });
 
   it("uses allowFrom as the group sender fallback for allowlist policy", async () => {
@@ -139,7 +170,7 @@ describe("handleQaInbound", () => {
       }),
     );
 
-    expect(runtime.channel.turn.runAssembled).toHaveBeenCalledTimes(1);
+    expect(runtime.channel.inbound.dispatchReply).toHaveBeenCalledTimes(1);
   });
 
   it("skips configured group messages that miss mention activation", async () => {
@@ -167,6 +198,6 @@ describe("handleQaInbound", () => {
       }),
     );
 
-    expect(runtime.channel.turn.runAssembled).not.toHaveBeenCalled();
+    expect(runtime.channel.inbound.dispatchReply).not.toHaveBeenCalled();
   });
 });

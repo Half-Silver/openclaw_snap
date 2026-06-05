@@ -1,3 +1,4 @@
+// Status service-summary tests cover managed gateway service status parsing and log path reporting.
 import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -14,6 +15,14 @@ function createService(overrides: Partial<GatewayService>): GatewayService {
     notLoadedText: "disabled",
     ...overrides,
   });
+}
+
+function requireMockArg(mock: { mock: { calls: unknown[][] } }, label: string): unknown {
+  const call = mock.mock.calls[0];
+  if (!call) {
+    throw new Error(`expected ${label} call`);
+  }
+  return call[0];
 }
 
 describe("readServiceStatusSummary", () => {
@@ -76,9 +85,9 @@ describe("readServiceStatusSummary", () => {
       "Daemon",
     );
 
-    const loadedArgs = isLoaded.mock.calls[0]?.[0];
+    const loadedArgs = requireMockArg(isLoaded, "isLoaded") as GatewayServiceEnvArgs;
     expect(loadedArgs?.env?.OPENCLAW_GATEWAY_PORT).toBe("18789");
-    const runtimeEnv = readRuntime.mock.calls[0]?.[0];
+    const runtimeEnv = requireMockArg(readRuntime, "readRuntime") as NodeJS.ProcessEnv;
     expect(runtimeEnv?.OPENCLAW_GATEWAY_PORT).toBe("18789");
     expect(summary.installed).toBe(true);
     expect(summary.loaded).toBe(true);
@@ -126,7 +135,7 @@ describe("readServiceStatusSummary", () => {
       expect(layout.packageRootReal).toBe(realRoot);
       expect(layout.packageVersion).toBe("0.0.0-test");
       expect(layout.entrypointSourceCheckout).toBe(true);
-      expect(layout.execStart).toContain("gateway run");
+      expect(layout.execStart).toBe(`/usr/bin/node ${entrypoint} gateway run`);
     });
   });
 });

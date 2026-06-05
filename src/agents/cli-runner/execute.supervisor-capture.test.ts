@@ -1,3 +1,5 @@
+// Covers CLI execution paths where the process supervisor keeps stdout capture
+// disabled and the runner must parse streamed chunks without relying on tails.
 import { beforeEach, describe, expect, it } from "vitest";
 import { onAgentEvent, resetAgentEventsForTest } from "../../infra/agent-events.js";
 import type { getProcessSupervisor } from "../../process/supervisor/index.js";
@@ -44,6 +46,8 @@ function buildPreparedCliRunContext(params: {
       env: {},
     },
     reusableCliSession: {},
+    hadSessionFile: false,
+    contextEngineConfig: {},
     modelId: "model",
     normalizedModel: "model",
     systemPrompt: "system",
@@ -51,6 +55,14 @@ function buildPreparedCliRunContext(params: {
     bootstrapPromptWarningLines: [],
     authEpochVersion: 2,
   };
+}
+
+function requireSupervisorSpawnInput(): SupervisorSpawnInput {
+  const call = supervisorSpawnMock.mock.calls[0];
+  if (!call) {
+    throw new Error("Expected supervisor spawn");
+  }
+  return call[0] as SupervisorSpawnInput;
 }
 
 beforeEach(() => {
@@ -78,7 +90,7 @@ describe("executePreparedCliRun supervisor output capture", () => {
     });
 
     const result = await executePreparedCliRun(buildPreparedCliRunContext({ output: "text" }));
-    const spawnInput = supervisorSpawnMock.mock.calls[0]?.[0] as SupervisorSpawnInput;
+    const spawnInput = requireSupervisorSpawnInput();
 
     expect(spawnInput.captureOutput).toBe(false);
     expect(result.rawText).toBe(fullText);
@@ -107,12 +119,14 @@ describe("executePreparedCliRun supervisor output capture", () => {
     await expect(
       executePreparedCliRun(buildPreparedCliRunContext({ output: "text" })),
     ).rejects.toThrow("CLI stdout exceeded");
-    const spawnInput = supervisorSpawnMock.mock.calls[0]?.[0] as SupervisorSpawnInput;
+    const spawnInput = requireSupervisorSpawnInput();
 
     expect(spawnInput.captureOutput).toBe(false);
   });
 
   it("parses valid oversized JSONL output incrementally", async () => {
+    // JSONL agents can emit huge tool deltas; only the incremental parser sees
+    // the complete stream once supervisor capture is intentionally off.
     const largeToolEvent = `${JSON.stringify({
       type: "stream_event",
       event: {
@@ -167,6 +181,8 @@ describe("executePreparedCliRun supervisor output capture", () => {
       output: "text",
       provider: "resume-jsonl-cli",
     });
+    // Resume can switch the backend from text to JSONL, so the executor must
+    // derive parser mode from the effective resume config instead of the base.
     Object.assign(context.preparedBackend.backend, {
       jsonlDialect: "claude-stream-json" as const,
       resumeArgs: ["resume", "{sessionId}"],
@@ -197,6 +213,8 @@ describe("executePreparedCliRun supervisor output capture", () => {
   });
 
   it("classifies failed stdout from the retained parse buffer before the diagnostic tail", async () => {
+    // The error classifier needs the retained parse buffer; the human-facing
+    // diagnostic tail may contain only noise once stdout grows large.
     const errorPrefix = `${JSON.stringify({
       type: "result",
       is_error: true,
@@ -232,6 +250,8 @@ describe("executePreparedCliRun supervisor output capture", () => {
   });
 
   it("still streams every JSONL stdout chunk with supervisor capture disabled", async () => {
+    // Streaming events are emitted from live chunks, not from the final captured
+    // stdout string, so users still see deltas when captureOutput is false.
     const agentEvents: Array<{ text?: string; delta?: string }> = [];
     const stop = onAgentEvent((event) => {
       if (event.stream !== "assistant") {
@@ -281,7 +301,7 @@ describe("executePreparedCliRun supervisor output capture", () => {
       const result = await executePreparedCliRun(
         buildPreparedCliRunContext({ output: "jsonl", provider: "claude-cli" }),
       );
-      const spawnInput = supervisorSpawnMock.mock.calls[0]?.[0] as SupervisorSpawnInput;
+      const spawnInput = requireSupervisorSpawnInput();
 
       expect(spawnInput.captureOutput).toBe(false);
       expect(result.text).toBe("Hello world");

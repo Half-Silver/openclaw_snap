@@ -1,3 +1,4 @@
+// Matrix tests cover startup plugin behavior.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CoreConfig } from "../../types.js";
 import type { MatrixAccountPatch } from "../config-update.js";
@@ -169,7 +170,7 @@ describe("runMatrixStartupMaintenance", () => {
     await runMatrixStartupMaintenance(params, deps);
 
     expect(deps.syncMatrixOwnProfile).toHaveBeenCalledTimes(1);
-    const [profileSyncParams] = vi.mocked(deps.syncMatrixOwnProfile).mock.calls[0] ?? [];
+    const [profileSyncParams] = vi.mocked(deps.syncMatrixOwnProfile).mock.calls.at(0) ?? [];
     if (!profileSyncParams) {
       throw new Error("profile sync params missing");
     }

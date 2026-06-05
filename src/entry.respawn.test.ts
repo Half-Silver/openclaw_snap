@@ -1,3 +1,4 @@
+// Tests entrypoint respawn behavior for compile cache and process flags.
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
@@ -13,11 +14,18 @@ import {
 type CliRespawnPlan = NonNullable<ReturnType<typeof buildCliRespawnPlan>>;
 
 function expectCliRespawnPlan(plan: ReturnType<typeof buildCliRespawnPlan>): CliRespawnPlan {
-  expect(plan).not.toBeNull();
   if (plan === null) {
     throw new Error("Expected CLI respawn plan");
   }
   return plan;
+}
+
+function requireFirstMockCall(mock: { mock: { calls: unknown[][] } }, label: string): unknown[] {
+  const [call] = mock.mock.calls;
+  if (!call) {
+    throw new Error(`expected ${label} call`);
+  }
+  return call;
 }
 
 describe("buildCliRespawnPlan", () => {
@@ -38,6 +46,7 @@ describe("buildCliRespawnPlan", () => {
       env: {},
       execArgv: [],
       autoNodeExtraCaCerts: "/etc/ssl/certs/ca-certificates.crt",
+      platform: "linux",
     });
 
     const respawnPlan = expectCliRespawnPlan(plan);
@@ -56,6 +65,7 @@ describe("buildCliRespawnPlan", () => {
         env: {},
         execArgv: [],
         autoNodeExtraCaCerts: "/etc/ssl/certs/ca-certificates.crt",
+        platform: "linux",
       });
 
       const respawnPlan = expectCliRespawnPlan(plan);
@@ -73,6 +83,7 @@ describe("buildCliRespawnPlan", () => {
         env: { [OPENCLAW_NODE_EXTRA_CA_CERTS_READY]: "1" },
         execArgv: [],
         autoNodeExtraCaCerts: undefined,
+        platform: "linux",
       }),
     ).toBeNull();
   });
@@ -83,6 +94,7 @@ describe("buildCliRespawnPlan", () => {
       env: { NODE_EXTRA_CA_CERTS: "/custom/ca.pem" },
       execArgv: [],
       autoNodeExtraCaCerts: "/etc/ssl/certs/ca-certificates.crt",
+      platform: "linux",
     });
 
     const respawnPlan = expectCliRespawnPlan(plan);
@@ -99,20 +111,83 @@ describe("buildCliRespawnPlan", () => {
         },
         execArgv: [EXPERIMENTAL_WARNING_FLAG],
         autoNodeExtraCaCerts: "/etc/ssl/certs/ca-certificates.crt",
+        platform: "linux",
       }),
     ).toBeNull();
   });
 
-  it("does not respawn on Windows", () => {
+  it("adds a larger V8 stack size on Windows", () => {
+    const plan = buildCliRespawnPlan({
+      argv: [
+        "node",
+        "C:\\Users\\alice\\AppData\\Roaming\\npm\\node_modules\\openclaw\\openclaw.mjs",
+        "dashboard",
+      ],
+      env: {},
+      execArgv: [],
+      autoNodeExtraCaCerts: "/etc/ssl/certs/ca-certificates.crt",
+      platform: "win32",
+    });
+
+    const respawnPlan = expectCliRespawnPlan(plan);
+    expect(respawnPlan.argv).toEqual([
+      "--stack-size=8192",
+      "C:\\Users\\alice\\AppData\\Roaming\\npm\\node_modules\\openclaw\\openclaw.mjs",
+      "dashboard",
+    ]);
+    expect(respawnPlan.env.NODE_EXTRA_CA_CERTS).toBeUndefined();
+    expect(respawnPlan.env[OPENCLAW_NODE_EXTRA_CA_CERTS_READY]).toBeUndefined();
+    expect(respawnPlan.env[OPENCLAW_NODE_OPTIONS_READY]).toBeUndefined();
+  });
+
+  it("normalizes duplicated Windows node.exe argv before respawning", () => {
+    const scriptPath =
+      "C:\\Users\\alice\\AppData\\Roaming\\npm\\node_modules\\openclaw\\openclaw.mjs";
+    const plan = buildCliRespawnPlan({
+      argv: [
+        "C:\\Program Files\\nodejs\\node.exe",
+        "C:\\Program Files\\nodejs\\node.exe",
+        scriptPath,
+        "node.exe",
+        "dashboard",
+        "--no-open",
+      ],
+      env: {},
+      execArgv: [],
+      execPath: "C:\\Program Files\\nodejs\\node.exe",
+      platform: "win32",
+    });
+
+    const respawnPlan = expectCliRespawnPlan(plan);
+    expect(respawnPlan.argv).toEqual(["--stack-size=8192", scriptPath, "dashboard", "--no-open"]);
+  });
+
+  it("does not respawn on Windows when stack size is already configured", () => {
     expect(
       buildCliRespawnPlan({
         argv: [
           "node",
           "C:\\Users\\alice\\AppData\\Roaming\\npm\\node_modules\\openclaw\\openclaw.mjs",
-          "onboard",
+          "dashboard",
         ],
         env: {},
-        execArgv: [],
+        execArgv: ["--stack-size=16384"],
+        autoNodeExtraCaCerts: "/etc/ssl/certs/ca-certificates.crt",
+        platform: "win32",
+      }),
+    ).toBeNull();
+  });
+
+  it("does not respawn on Windows when underscore stack size spelling is already configured", () => {
+    expect(
+      buildCliRespawnPlan({
+        argv: [
+          "node",
+          "C:\\Users\\alice\\AppData\\Roaming\\npm\\node_modules\\openclaw\\openclaw.mjs",
+          "dashboard",
+        ],
+        env: {},
+        execArgv: ["--stack_size=16384"],
         autoNodeExtraCaCerts: "/etc/ssl/certs/ca-certificates.crt",
         platform: "win32",
       }),
@@ -186,9 +261,12 @@ describe("runCliRespawnPlan", () => {
         env: { OPENCLAW_NODE_OPTIONS_READY: "1" },
       },
     );
-    expect(attachChildProcessBridge.mock.calls[0]?.[0]).toBe(child);
-    const bridgeOptions = attachChildProcessBridge.mock.calls[0]?.[1];
-    expect(typeof bridgeOptions?.onSignal).toBe("function");
+    const [bridgeChild, bridgeOptions] = requireFirstMockCall(
+      attachChildProcessBridge,
+      "child process bridge attach",
+    );
+    expect(bridgeChild).toBe(child);
+    expect(bridgeOptions).toEqual({ onSignal: expect.any(Function) });
 
     child.emit("exit", 0, null);
 
@@ -232,6 +310,10 @@ describe("runCliRespawnPlan", () => {
       vi.advanceTimersByTime(1_000);
 
       expect(kill).toHaveBeenCalledWith(process.platform === "win32" ? "SIGTERM" : "SIGKILL");
+      expect(exit).not.toHaveBeenCalled();
+
+      child.emit("exit", null, "SIGKILL");
+
       expect(exit).toHaveBeenCalledWith(1);
     } finally {
       vi.useRealTimers();

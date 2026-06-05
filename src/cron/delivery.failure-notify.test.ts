@@ -1,3 +1,4 @@
+// Delivery failure notification tests cover alerts emitted after delivery failures.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -37,6 +38,31 @@ vi.mock("../logging.js", () => ({
 }));
 
 const { sendFailureNotificationAnnounce } = await import("./delivery.js");
+
+type DeliveryRequest = {
+  abortSignal?: unknown;
+  accountId?: string;
+  bestEffort?: boolean;
+  cfg?: unknown;
+  channel?: string;
+  deps?: unknown;
+  identity?: unknown;
+  payloads?: unknown;
+  session?: unknown;
+  threadId?: number;
+  to?: string;
+};
+
+type WarnMeta = { channel?: string; err?: string; to?: string };
+
+function firstDeliveryRequest() {
+  const [deliveryRequest] = mocks.deliverOutboundPayloads.mock.calls[0] as [DeliveryRequest];
+  return deliveryRequest;
+}
+
+function firstWarnCall() {
+  return mocks.warn.mock.calls[0] as [WarnMeta, string];
+}
 
 describe("sendFailureNotificationAnnounce", () => {
   beforeEach(() => {
@@ -80,21 +106,7 @@ describe("sendFailureNotificationAnnounce", () => {
       sessionKey: "cron:job-1:failure",
     });
     expect(mocks.deliverOutboundPayloads).toHaveBeenCalledTimes(1);
-    const [deliveryRequest] = mocks.deliverOutboundPayloads.mock.calls[0] as [
-      {
-        abortSignal?: unknown;
-        accountId?: string;
-        bestEffort?: boolean;
-        cfg?: unknown;
-        channel?: string;
-        deps?: unknown;
-        identity?: unknown;
-        payloads?: unknown;
-        session?: unknown;
-        threadId?: number;
-        to?: string;
-      },
-    ];
+    const deliveryRequest = firstDeliveryRequest();
     expect(deliveryRequest.cfg).toBe(cfg);
     expect(deliveryRequest.channel).toBe("telegram");
     expect(deliveryRequest.to).toBe("123");
@@ -171,10 +183,7 @@ describe("sendFailureNotificationAnnounce", () => {
     ).resolves.toBeUndefined();
 
     expect(mocks.warn).toHaveBeenCalledTimes(1);
-    const [warnMeta, warnMessage] = mocks.warn.mock.calls[0] as [
-      { channel?: string; err?: string; to?: string },
-      string,
-    ];
+    const [warnMeta, warnMessage] = firstWarnCall();
     expect(warnMeta.err).toBe("send failed");
     expect(warnMeta.channel).toBe("telegram");
     expect(warnMeta.to).toBe("123");

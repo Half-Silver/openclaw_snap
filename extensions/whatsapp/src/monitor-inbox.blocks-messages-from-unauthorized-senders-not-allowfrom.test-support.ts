@@ -1,3 +1,4 @@
+// Whatsapp plugin module implements monitor inbox.blocks messages from unauthorized senders not allowfrom support behavior.
 import "./monitor-inbox.test-harness.js";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -80,6 +81,14 @@ async function startWebInboxMonitor(params: {
         },
   );
   return { onMessage, listener, sock: getSock() };
+}
+
+function firstInboundPayload(onMessage: ReturnType<typeof vi.fn>) {
+  const payload = onMessage.mock.calls[0]?.[0];
+  if (!payload || typeof payload !== "object") {
+    throw new Error("expected first inbound payload");
+  }
+  return payload as Record<string, unknown>;
 }
 
 describe("web monitor inbox", () => {
@@ -252,7 +261,7 @@ describe("web monitor inbox", () => {
     await settleInboundWork();
 
     expect(onMessage).toHaveBeenCalledTimes(1);
-    const payload = onMessage.mock.calls[0][0];
+    const payload = firstInboundPayload(onMessage);
     expect(payload.chatType).toBe("group");
     expect(payload.senderE164).toBe("+999");
 
@@ -340,7 +349,7 @@ describe("web monitor inbox", () => {
 
     // Should call onMessage because sender is in groupAllowFrom
     expect(onMessage).toHaveBeenCalledTimes(1);
-    const payload = onMessage.mock.calls[0][0];
+    const payload = firstInboundPayload(onMessage);
     expect(payload.chatType).toBe("group");
     expect(payload.senderE164).toBe("+15551234567");
 
@@ -374,7 +383,7 @@ describe("web monitor inbox", () => {
 
     // Should call onMessage because wildcard allows all senders
     expect(onMessage).toHaveBeenCalledTimes(1);
-    const payload = onMessage.mock.calls[0][0];
+    const payload = firstInboundPayload(onMessage);
     expect(payload.chatType).toBe("group");
 
     await listener.close();

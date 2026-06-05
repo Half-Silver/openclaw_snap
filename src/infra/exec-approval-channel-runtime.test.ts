@@ -1,3 +1,4 @@
+// Covers gateway-backed approval channel runtime behavior.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GatewayClient } from "../gateway/client.js";
 import type { ExecApprovalRequest } from "./exec-approvals.js";
@@ -47,8 +48,19 @@ function createDeferred<T>() {
 
 type GatewayEventClientParams = { onEvent?: (evt: { event: string; payload: unknown }) => void };
 
+function firstMockCall(
+  mock: { mock: { calls: Array<readonly unknown[]> } },
+  label: string,
+): readonly unknown[] {
+  const call = mock.mock.calls[0];
+  if (!call) {
+    throw new Error(`expected ${label} call`);
+  }
+  return call;
+}
+
 function lastGatewayEventClientParams(): GatewayEventClientParams | undefined {
-  return mockCreateOperatorApprovalsGatewayClient.mock.calls[0]?.[0] as
+  return firstMockCall(mockCreateOperatorApprovalsGatewayClient, "operator approvals client")[0] as
     | GatewayEventClientParams
     | undefined;
 }
@@ -100,7 +112,10 @@ function mockReplayLists(params: {
 
 function expectStartGatewayClientCall(preauthHandshakeTimeoutMs?: number) {
   expect(mockStartGatewayClientWhenEventLoopReady).toHaveBeenCalledTimes(1);
-  const [client, options] = mockStartGatewayClientWhenEventLoopReady.mock.calls[0] ?? [];
+  const [client, options] = firstMockCall(
+    mockStartGatewayClientWhenEventLoopReady,
+    "gateway client start readiness",
+  );
   expect(typeof (client as { start?: unknown } | undefined)?.start).toBe("function");
   expect(options).toEqual({
     clientOptions: { preauthHandshakeTimeoutMs },
@@ -112,7 +127,7 @@ function expectFinalizedExpired(
   params: { id: string; entries: Array<{ id: string }> },
 ) {
   expect(finalizedExpired).toHaveBeenCalledTimes(1);
-  const payload = finalizedExpired.mock.calls[0]?.[0] as
+  const payload = firstMockCall(finalizedExpired, "expired approval finalization")[0] as
     | { request?: { id?: string }; entries?: Array<{ id: string }> }
     | undefined;
   expect(payload?.request?.id).toBe(params.id);
@@ -124,7 +139,7 @@ function expectFinalizedResolved(
   params: { id: string; decision: string; entries: Array<{ id: string }> },
 ) {
   expect(finalizedResolved).toHaveBeenCalledTimes(1);
-  const payload = finalizedResolved.mock.calls[0]?.[0] as
+  const payload = firstMockCall(finalizedResolved, "resolved approval finalization")[0] as
     | {
         request?: { id?: string };
         resolved?: { id?: string; decision?: string };
@@ -436,7 +451,7 @@ describe("createExecApprovalChannelRuntime", () => {
     });
 
     let caught: unknown;
-    await runtime.start().catch((error) => {
+    await runtime.start().catch((error: unknown) => {
       caught = error;
     });
 

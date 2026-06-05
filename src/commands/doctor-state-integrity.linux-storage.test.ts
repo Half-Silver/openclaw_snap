@@ -1,3 +1,4 @@
+// Doctor Linux storage tests cover SD-card-backed state directory detection.
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -115,7 +116,6 @@ describe("detectLinuxSdBackedStateDir", () => {
       },
     });
 
-    expect(result).not.toBeNull();
     if (result === null) {
       throw new Error("Expected Linux state storage warning details");
     }

@@ -1,3 +1,4 @@
+// Qa Matrix plugin module implements scenario runtime behavior.
 import {
   MATRIX_QA_DRIVER_DM_ROOM_KEY,
   MATRIX_QA_SECONDARY_ROOM_KEY,
@@ -61,6 +62,7 @@ import {
   runMatrixQaE2eeRecoveryKeyLifecycleScenario,
   runMatrixQaE2eeRecoveryOwnerVerificationRequiredScenario,
   runMatrixQaE2eeRestartResumeScenario,
+  runMatrixQaE2eeStateAfterMissingEncryptionScenario,
   runMatrixQaE2eeStaleDeviceHygieneScenario,
   runMatrixQaE2eeThreadFollowUpScenario,
   runMatrixQaE2eeVerificationNoticeNoTriggerScenario,
@@ -387,6 +389,8 @@ export async function runMatrixQaScenario(
       return await runInboundEditNoDuplicateTriggerScenario(context);
     case "matrix-e2ee-basic-reply":
       return await runMatrixQaE2eeBasicReplyScenario(context);
+    case "matrix-e2ee-state-after-missing-encryption":
+      return await runMatrixQaE2eeStateAfterMissingEncryptionScenario(context);
     case "matrix-e2ee-thread-follow-up":
       return await runMatrixQaE2eeThreadFollowUpScenario(context);
     case "matrix-e2ee-bootstrap-success":

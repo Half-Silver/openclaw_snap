@@ -1,3 +1,7 @@
+/**
+ * iMessage channel config types shared by core schema, bundled plugin runtime, and plugin SDK exports.
+ * Root fields apply to the default account; `accounts` entries override them per account.
+ */
 import type {
   BlockStreamingCoalesceConfig,
   ContextVisibilityMode,
@@ -12,6 +16,7 @@ import type {
 import type { DmConfig } from "./types.messages.js";
 import type { GroupToolPolicyBySenderConfig, GroupToolPolicyConfig } from "./types.tools.js";
 
+/** Private-API and helper actions the iMessage runtime may expose to agents. */
 export type IMessageActionConfig = {
   reactions?: boolean;
   edit?: boolean;
@@ -26,6 +31,10 @@ export type IMessageActionConfig = {
   sendAttachment?: boolean;
 };
 
+/** Inbound tapback notification policy. */
+export type IMessageReactionNotificationMode = "off" | "own" | "all";
+
+/** Per-account iMessage runtime/config shape. */
 export type IMessageAccountConfig = {
   /** Optional display name for this account (used in CLI/UI lists). */
   name?: string;
@@ -92,6 +101,13 @@ export type IMessageAccountConfig = {
   /** When private API is available, mark inbound chats read before dispatch (default: true). */
   sendReadReceipts?: boolean;
   /**
+   * Controls inbound tapback notifications:
+   * - "off": ignore tapbacks
+   * - "own" (default): notify only when users react to bot-authored messages
+   * - "all": notify for all inbound tapbacks from authorized senders
+   */
+  reactionNotifications?: IMessageReactionNotificationMode;
+  /**
    * Merge consecutive same-sender DM rows from `chat.db` into a single agent
    * turn, so Apple's split-send (`<command> <URL>` arriving as two separate
    * rows ~0.8-2.0 s apart) lands as one merged message. DM-only — group chats
@@ -157,6 +173,7 @@ export type IMessageAccountConfig = {
   responsePrefix?: string;
 };
 
+/** Top-level iMessage config, with optional account map layered over default account fields. */
 export type IMessageConfig = {
   /** Optional per-account iMessage configuration (multi-account). */
   accounts?: Record<string, IMessageAccountConfig>;

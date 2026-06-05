@@ -1,3 +1,4 @@
+// Matrix tests cover channel.resolve plugin behavior.
 import { createNonExitingRuntimeEnv } from "openclaw/plugin-sdk/plugin-test-runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -26,7 +27,7 @@ describe("matrix resolver adapter", () => {
     });
 
     expect(resolveMatrixTargetsMock).toHaveBeenCalledTimes(1);
-    const [forwarded] = resolveMatrixTargetsMock.mock.calls[0] as unknown as [
+    const [forwarded] = resolveMatrixTargetsMock.mock.calls.at(0) as unknown as [
       {
         accountId: string;
         cfg: { channels: { matrix: Record<string, never> } };

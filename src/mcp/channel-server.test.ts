@@ -1,3 +1,4 @@
+// Channel MCP server tests cover channel tool registration and requests.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, test, vi } from "vitest";
@@ -72,6 +73,14 @@ function attachReadyGateway(
 async function flushMcpNotifications() {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function requireFirstMockCall(mock: { mock: { calls: unknown[][] } }, label: string): unknown[] {
+  const call = mock.mock.calls[0];
+  if (!call) {
+    throw new Error(`expected ${label} call`);
+  }
+  return call;
 }
 
 function gatewayRequestError(retryable: boolean): Error {
@@ -199,7 +208,9 @@ describe("openclaw channel mcp server", () => {
         const messages = await bridge.readMessages(sessionKey, 5);
         expect(messages[0]?.role).toBe("assistant");
         expect(messages[0]?.content).toEqual([{ type: "text", text: "hello from transcript" }]);
-        expect((messages[1]?.__openclaw as { id?: string } | undefined)?.id).toBe("msg-attachment");
+        expect((messages[1]?.["__openclaw"] as { id?: string } | undefined)?.id).toBe(
+          "msg-attachment",
+        );
         expect(
           extractAttachmentsFromMessage(messages[1]).some(
             (entry) => (entry as { type?: unknown }).type === "image",
@@ -258,7 +269,7 @@ describe("openclaw channel mcp server", () => {
 
       test("emits Claude channel and permission notifications", async () => {
         const sessionKey = "agent:main:main";
-        let mcp: Awaited<ReturnType<typeof connectMcpWithoutGateway>> | null = null;
+        let mcp: Awaited<ReturnType<typeof connectMcpWithoutGateway>> | null | undefined;
         try {
           const channelNotifications: Array<{ content: string; meta: Record<string, string> }> = [];
           const permissionNotifications: Array<{
@@ -383,7 +394,7 @@ describe("openclaw channel mcp server", () => {
       });
 
       expect(gatewayRequest).toHaveBeenCalledTimes(1);
-      const [method, payload] = gatewayRequest.mock.calls[0] ?? [];
+      const [method, payload] = requireFirstMockCall(gatewayRequest, "gateway request");
       expect(method).toBe("send");
       const sendPayload = payload as Record<string, unknown>;
       expect(sendPayload.to).toBe("-100123");
@@ -479,14 +490,10 @@ describe("openclaw channel mcp server", () => {
 
       (
         bridge as unknown as {
-          pendingClaudePermissions: Map<string, Record<string, unknown>>;
+          pendingClaudePermissions: Map<string, number>;
           server: { server: { notification: ReturnType<typeof vi.fn> } };
         }
-      ).pendingClaudePermissions.set("abcde", {
-        toolName: "Bash",
-        description: "run npm test",
-        inputPreview: '{"cmd":"npm test"}',
-      });
+      ).pendingClaudePermissions.set("abcde", Date.now());
       (
         bridge as unknown as {
           server: { server: { notification: ReturnType<typeof vi.fn> } };

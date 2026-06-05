@@ -1,3 +1,5 @@
+// SSH sandbox backend tests cover runtime description/removal, remote seeding,
+// command execution, bind validation, and backend config plumbing.
 import os from "node:os";
 import path from "node:path";
 import {
@@ -66,6 +68,20 @@ function requireRecord(value: unknown, label: string): Record<string, unknown> {
     throw new Error(`expected ${label}`);
   }
   return value as Record<string, unknown>;
+}
+
+function requireMockRecordArg(mock: ReturnType<typeof vi.fn>, callIndex: number, label: string) {
+  return requireRecord(mock.mock.calls[callIndex]?.[0], label);
+}
+
+function requireSshRunCommandParams(callIndex = 0) {
+  // Backend assertions inspect the normalized remote command params before the
+  // ssh helper turns them into argv.
+  return requireMockRecordArg(sshMocks.runSshSandboxCommand, callIndex, "ssh run command params");
+}
+
+function requireSshUploadParams(callIndex: number, label: string) {
+  return requireMockRecordArg(sshMocks.uploadDirectoryToSshTarget, callIndex, label);
 }
 
 function createBackendSandboxConfig(params?: { binds?: string[]; target?: string }): SandboxConfig {
@@ -177,16 +193,14 @@ describe("ssh sandbox backend", () => {
       actualConfigLabel: "peter@example.com:2222",
       configLabelMatch: true,
     });
-    const sessionSettings = requireRecord(
-      sshMocks.createSshSandboxSessionFromSettings.mock.calls[0]?.[0],
+    const sessionSettings = requireMockRecordArg(
+      sshMocks.createSshSandboxSessionFromSettings,
+      0,
       "ssh session settings",
     );
     expect(sessionSettings.target).toBe("peter@example.com:2222");
     expect(sessionSettings.workspaceRoot).toBe("/remote/openclaw");
-    const commandParams = requireRecord(
-      sshMocks.runSshSandboxCommand.mock.calls[0]?.[0],
-      "ssh run command params",
-    );
+    const commandParams = requireSshRunCommandParams();
     expect(commandParams.remoteCommand).toContain("/remote/openclaw/openclaw-ssh-agent-worker");
   });
 
@@ -205,10 +219,7 @@ describe("ssh sandbox backend", () => {
       config: createConfig(),
     });
 
-    const commandParams = requireRecord(
-      sshMocks.runSshSandboxCommand.mock.calls[0]?.[0],
-      "ssh run command params",
-    );
+    const commandParams = requireSshRunCommandParams();
     expect(commandParams.allowFailure).toBe(true);
     expect(commandParams.remoteCommand).toContain('rm -rf -- "$1"');
   });
@@ -293,14 +304,11 @@ describe("ssh sandbox backend", () => {
     ]);
     expect(execSpec.argv.at(-1)).toContain("/remote/openclaw/openclaw-ssh-agent-worker");
     expect(sshMocks.uploadDirectoryToSshTarget).toHaveBeenCalledTimes(2);
-    const workspaceUploadParams = requireRecord(
-      sshMocks.uploadDirectoryToSshTarget.mock.calls[0]?.[0],
-      "workspace upload params",
-    );
+    const workspaceUploadParams = requireSshUploadParams(0, "workspace upload params");
     expect(workspaceUploadParams.localDir).toBe("/tmp/workspace");
     expect(workspaceUploadParams.remoteDir).toContain("/workspace");
     const agentUploadParams = requireRecord(
-      sshMocks.uploadDirectoryToSshTarget.mock.calls[1]?.[0],
+      sshMocks.uploadDirectoryToSshTarget.mock.calls.at(1)?.[0],
       "agent upload params",
     );
     expect(agentUploadParams.localDir).toBe("/tmp/agent");
@@ -312,7 +320,8 @@ describe("ssh sandbox backend", () => {
       timedOut: false,
       token: execSpec.finalizeToken,
     });
-    expect(sshMocks.disposeSshSandboxSession).toHaveBeenCalled();
+    expect(sshMocks.createSshSandboxSessionFromSettings).toHaveBeenCalledTimes(2);
+    expect(sshMocks.disposeSshSandboxSession).toHaveBeenCalledTimes(2);
   });
 
   it("filters blocked secrets from exec subprocess env", async () => {

@@ -1,3 +1,4 @@
+// Covers live model extra-probe builders, matchers, and route skip lists.
 import { describe, expect, it } from "vitest";
 import {
   buildLiveModelFileProbeContext,
@@ -34,19 +35,21 @@ describe("live model turn probes", () => {
   it("builds a text file read probe", () => {
     const context = buildLiveModelFileProbeContext({ systemPrompt: "sys" });
     expect(context.systemPrompt).toBe("sys");
-    expect(context.messages[0]?.content).toEqual(
-      expect.stringContaining(`LIVE_LABEL=${LIVE_MODEL_FILE_PROBE_TOKEN}`),
+    expect(context.messages[0]?.content).toBe(
+      "Read this visible label and reply with only the value after LIVE_LABEL.\n\nLIVE_LABEL=opal",
     );
   });
 
   it("builds a stricter file read retry probe", () => {
     const context = buildLiveModelFileProbeRetryContext({});
-    expect(context.messages[0]?.content).toEqual(
-      expect.stringContaining(`Reply with exactly ${LIVE_MODEL_FILE_PROBE_TOKEN}`),
+    expect(context.messages[0]?.content).toBe(
+      "The visible label value is:\n\nopal\n\nReply with exactly opal.",
     );
   });
 
   it("builds an image probe with native image content", () => {
+    // The image probe must use native image blocks, not markdown or remote
+    // URLs, so provider validation tests exercise multimodal input paths.
     const context = buildLiveModelImageProbeContext({});
     const content = context.messages[0]?.content;
     expect(Array.isArray(content)).toBe(true);
@@ -91,6 +94,8 @@ describe("live model turn probes", () => {
   });
 
   it("skips known stale file probe routes", () => {
+    // These routes are still useful for live text calls but have stale or
+    // unreliable file-tool behavior, so extra probes skip them explicitly.
     expect(shouldSkipLiveModelFileProbe({ provider: "opencode-go", id: "glm-5" })).toBe(true);
     expect(shouldSkipLiveModelFileProbe({ provider: "google", id: "gemini-3.1-pro-preview" })).toBe(
       true,

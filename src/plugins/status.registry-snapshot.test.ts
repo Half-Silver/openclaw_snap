@@ -1,3 +1,4 @@
+// Covers plugin status snapshots built from registry state.
 import fs from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -25,9 +26,9 @@ afterEach(() => {
 });
 
 function requireRecord(value: unknown): Record<string, unknown> {
-  expect(value).toBeTruthy();
-  expect(typeof value).toBe("object");
-  expect(Array.isArray(value)).toBe(false);
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Expected a non-array record");
+  }
   return value as Record<string, unknown>;
 }
 
@@ -36,7 +37,9 @@ function requirePlugin(
   id: string,
 ): Record<string, unknown> {
   const plugin = plugins.find((entry) => entry.id === id);
-  expect(plugin).toBeTruthy();
+  if (!plugin) {
+    throw new Error(`Expected plugin ${id}`);
+  }
   return requireRecord(plugin);
 }
 
@@ -50,7 +53,9 @@ function requireNamedEntry(
   name: string,
 ): Record<string, unknown> {
   const entry = entries.find((candidate) => candidate.name === name);
-  expect(entry).toBeTruthy();
+  if (!entry) {
+    throw new Error(`Expected entry ${name}`);
+  }
   return requireRecord(entry);
 }
 

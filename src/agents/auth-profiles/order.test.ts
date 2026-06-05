@@ -1,7 +1,13 @@
+/**
+ * Tests auth profile ordering and provider compatibility.
+ * Covers manifest auth aliases, configured order, cooldown state, AWS SDK
+ * profiles, and OpenAI/Codex compatibility.
+ */
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resetProviderAuthAliasMapCacheForTest } from "../provider-auth-aliases.js";
 import { saveAuthProfileStore } from "./store.js";
 import type { AuthProfileStore } from "./types.js";
 
@@ -22,34 +28,21 @@ vi.mock("../../plugins/manifest-registry.js", () => ({
 }));
 
 vi.mock("./external-auth.js", () => ({
+  listRuntimeExternalAuthProfiles: () => [],
   overlayExternalAuthProfiles: <T>(store: T) => store,
   shouldPersistExternalAuthProfile: () => true,
 }));
 
-async function importAuthProfileModulesWithAliasRegistry() {
-  vi.resetModules();
-  vi.doMock("../../plugins/manifest-registry.js", () => ({
-    loadPluginManifestRegistry,
-  }));
-  const [{ resolveAuthProfileOrder }, { markAuthProfileSuccess }] = await Promise.all([
-    import("./order.js"),
-    import("./profiles.js"),
-  ]);
-  return { markAuthProfileSuccess, resolveAuthProfileOrder };
-}
+import { isStoredCredentialCompatibleWithAuthProvider, resolveAuthProfileOrder } from "./order.js";
+import { markAuthProfileSuccess } from "./profiles.js";
 
 describe("resolveAuthProfileOrder", () => {
   beforeEach(() => {
+    resetProviderAuthAliasMapCacheForTest();
     loadPluginManifestRegistry.mockClear();
   });
 
-  afterEach(() => {
-    vi.doUnmock("../../plugins/manifest-registry.js");
-    vi.resetModules();
-  });
-
   it("accepts aliased provider credentials from manifest metadata", async () => {
-    const { resolveAuthProfileOrder } = await importAuthProfileModulesWithAliasRegistry();
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
@@ -70,7 +63,6 @@ describe("resolveAuthProfileOrder", () => {
   });
 
   it("uses canonical provider auth order for alias providers", async () => {
-    const { resolveAuthProfileOrder } = await importAuthProfileModulesWithAliasRegistry();
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
@@ -99,7 +91,6 @@ describe("resolveAuthProfileOrder", () => {
   });
 
   it("falls back to legacy stored auth order when alias order is empty", async () => {
-    const { resolveAuthProfileOrder } = await importAuthProfileModulesWithAliasRegistry();
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
@@ -129,7 +120,6 @@ describe("resolveAuthProfileOrder", () => {
   });
 
   it("falls back to legacy configured auth order when alias order is empty", async () => {
-    const { resolveAuthProfileOrder } = await importAuthProfileModulesWithAliasRegistry();
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
@@ -163,7 +153,6 @@ describe("resolveAuthProfileOrder", () => {
   });
 
   it("keeps explicit empty configured auth order as a provider disable", async () => {
-    const { resolveAuthProfileOrder } = await importAuthProfileModulesWithAliasRegistry();
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
@@ -191,7 +180,6 @@ describe("resolveAuthProfileOrder", () => {
   });
 
   it("keeps explicit empty stored auth order as a provider disable", async () => {
-    const { resolveAuthProfileOrder } = await importAuthProfileModulesWithAliasRegistry();
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
@@ -221,21 +209,77 @@ describe("resolveAuthProfileOrder", () => {
     expect(order).toStrictEqual([]);
   });
 
+  it("falls back to stored profiles when a stored order only has missing credentials", async () => {
+    const store: AuthProfileStore = {
+      version: 1,
+      profiles: {
+        "fixture-provider:key": {
+          type: "api_key",
+          provider: "fixture-provider",
+          key: "sk-primary",
+        },
+        "fixture-provider:oauth": {
+          type: "oauth",
+          provider: "fixture-provider",
+          access: "access-token",
+          refresh: "refresh-token",
+          expires: Date.now() + 60_000,
+        },
+      },
+      order: {
+        "fixture-provider": ["fixture-provider:deleted"],
+      },
+    };
+
+    const order = resolveAuthProfileOrder({
+      store,
+      provider: "fixture-provider",
+    });
+
+    expect(order).toStrictEqual(["fixture-provider:oauth", "fixture-provider:key"]);
+  });
+
+  it("does not fall back past an explicit configured auth order", async () => {
+    const store: AuthProfileStore = {
+      version: 1,
+      profiles: {
+        "fixture-provider:primary": {
+          type: "api_key",
+          provider: "fixture-provider",
+          key: "sk-primary",
+        },
+      },
+    };
+
+    const order = resolveAuthProfileOrder({
+      cfg: {
+        auth: {
+          order: {
+            "fixture-provider": ["fixture-provider:missing"],
+          },
+        },
+      },
+      store,
+      provider: "fixture-provider",
+    });
+
+    expect(order).toStrictEqual([]);
+  });
+
   it("lets Codex auth use friendly OpenAI auth order entries", async () => {
-    const { resolveAuthProfileOrder } = await importAuthProfileModulesWithAliasRegistry();
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
         "openai:personal": {
           type: "oauth",
-          provider: "openai-codex",
+          provider: "openai",
           access: "access",
           refresh: "refresh",
           expires: Date.now() + 60_000,
         },
         "openai:backup": {
           type: "api_key",
-          provider: "openai-codex",
+          provider: "openai",
           key: "sk-backup",
         },
         "openai:platform": {
@@ -255,20 +299,19 @@ describe("resolveAuthProfileOrder", () => {
         },
       },
       store,
-      provider: "openai-codex",
+      provider: "openai",
     });
 
     expect(order).toEqual(["openai:personal", "openai:backup", "openai:platform"]);
   });
 
-  it("lets Codex auth discover normal OpenAI API-key profiles as backups", async () => {
-    const { resolveAuthProfileOrder } = await importAuthProfileModulesWithAliasRegistry();
+  it("discovers OpenAI OAuth profiles before API-key backups", async () => {
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
-        "openai-codex:personal": {
+        "openai:personal": {
           type: "oauth",
-          provider: "openai-codex",
+          provider: "openai",
           access: "access",
           refresh: "refresh",
           expires: Date.now() + 60_000,
@@ -290,14 +333,35 @@ describe("resolveAuthProfileOrder", () => {
 
     const order = resolveAuthProfileOrder({
       store,
-      provider: "openai-codex",
+      provider: "openai",
     });
 
-    expect(order).toEqual(["openai-codex:personal", "openai:backup"]);
+    expect(order).toEqual(["openai:personal", "openai:oauth", "openai:backup"]);
   });
 
-  it("preserves native Codex profiles before OpenAI alias API-key order", async () => {
-    const { resolveAuthProfileOrder } = await importAuthProfileModulesWithAliasRegistry();
+  it("does not discover OAuth profiles without inline credential material", async () => {
+    const store: AuthProfileStore = {
+      version: 1,
+      profiles: {
+        "openai:personal": {
+          type: "oauth",
+          provider: "openai",
+          access: "",
+          refresh: "",
+          expires: Date.now() + 60_000,
+        },
+      },
+    };
+
+    const order = resolveAuthProfileOrder({
+      store,
+      provider: "openai",
+    });
+
+    expect(order).toEqual([]);
+  });
+
+  it("uses explicit OpenAI auth order without implicit profile prepending", async () => {
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
@@ -306,9 +370,9 @@ describe("resolveAuthProfileOrder", () => {
           provider: "openai",
           key: "sk-platform",
         },
-        "openai-codex:personal": {
+        "openai:personal": {
           type: "oauth",
-          provider: "openai-codex",
+          provider: "openai",
           access: "access",
           refresh: "refresh",
           expires: Date.now() + 60_000,
@@ -325,29 +389,55 @@ describe("resolveAuthProfileOrder", () => {
         },
       },
       store,
-      provider: "openai-codex",
+      provider: "openai",
     });
 
-    expect(order).toEqual(["openai-codex:personal", "openai:default"]);
+    expect(order).toEqual(["openai:default"]);
   });
 
-  it("keeps direct OpenAI Codex auth order ahead of the friendly OpenAI alias", async () => {
-    const { resolveAuthProfileOrder } = await importAuthProfileModulesWithAliasRegistry();
+  it("keeps Codex profiles listed in the friendly OpenAI order for Codex auth", async () => {
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
         "openai:personal": {
           type: "oauth",
-          provider: "openai-codex",
+          provider: "openai",
           access: "access",
           refresh: "refresh",
           expires: Date.now() + 60_000,
         },
-        "openai-codex:legacy": {
+        "openai:backup": {
+          type: "api_key",
+          provider: "openai",
+          key: "sk-platform",
+        },
+      },
+    };
+
+    const order = resolveAuthProfileOrder({
+      cfg: {
+        auth: {
+          order: {
+            openai: ["openai:personal", "openai:backup"],
+          },
+        },
+      },
+      store,
+      provider: "openai",
+    });
+
+    expect(order).toEqual(["openai:personal", "openai:backup"]);
+  });
+
+  it("uses canonical OpenAI auth order", async () => {
+    const store: AuthProfileStore = {
+      version: 1,
+      profiles: {
+        "openai:personal": {
           type: "oauth",
-          provider: "openai-codex",
-          access: "legacy-access",
-          refresh: "legacy-refresh",
+          provider: "openai",
+          access: "access",
+          refresh: "refresh",
           expires: Date.now() + 60_000,
         },
       },
@@ -358,19 +448,17 @@ describe("resolveAuthProfileOrder", () => {
         auth: {
           order: {
             openai: ["openai:personal"],
-            "openai-codex": ["openai-codex:legacy"],
           },
         },
       },
       store,
-      provider: "openai-codex",
+      provider: "openai",
     });
 
-    expect(order).toEqual(["openai-codex:legacy"]);
+    expect(order).toEqual(["openai:personal"]);
   });
 
-  it("keeps configured Codex auth order ahead of stored OpenAI fallback order", async () => {
-    const { resolveAuthProfileOrder } = await importAuthProfileModulesWithAliasRegistry();
+  it("keeps stored OpenAI auth order when present", async () => {
     const store: AuthProfileStore = {
       version: 1,
       profiles: {
@@ -379,9 +467,9 @@ describe("resolveAuthProfileOrder", () => {
           provider: "openai",
           key: "sk-platform",
         },
-        "openai-codex:work": {
+        "openai:work": {
           type: "oauth",
-          provider: "openai-codex",
+          provider: "openai",
           access: "work-access",
           refresh: "work-refresh",
           expires: Date.now() + 60_000,
@@ -396,19 +484,18 @@ describe("resolveAuthProfileOrder", () => {
       cfg: {
         auth: {
           order: {
-            "openai-codex": ["openai-codex:work"],
+            openai: ["openai:work"],
           },
         },
       },
       store,
-      provider: "openai-codex",
+      provider: "openai",
     });
 
-    expect(order).toEqual(["openai-codex:work"]);
+    expect(order).toEqual(["openai:platform"]);
   });
 
   it("marks profile success with one canonical last-good and usage update", async () => {
-    const { markAuthProfileSuccess } = await importAuthProfileModulesWithAliasRegistry();
     const agentDir = await mkdtemp(path.join(os.tmpdir(), "openclaw-auth-profile-success-"));
     try {
       const store: AuthProfileStore = {
@@ -446,13 +533,12 @@ describe("resolveAuthProfileOrder", () => {
       expect(store.lastGood).toEqual({
         "fixture-provider": "fixture-provider:default",
       });
-      expect(store.usageStats?.["fixture-provider:default"]).toMatchObject({
-        errorCount: 0,
-        blockedUntil: undefined,
-        blockedReason: undefined,
-        cooldownUntil: undefined,
-        cooldownReason: undefined,
-      });
+      const usageStats = store.usageStats?.["fixture-provider:default"];
+      expect(usageStats?.errorCount).toBe(0);
+      expect(usageStats?.blockedUntil).toBeUndefined();
+      expect(usageStats?.blockedReason).toBeUndefined();
+      expect(usageStats?.cooldownUntil).toBeUndefined();
+      expect(usageStats?.cooldownReason).toBeUndefined();
       const lastUsed = store.usageStats?.["fixture-provider:default"]?.lastUsed;
       expect(typeof lastUsed).toBe("number");
       expect(Number.isFinite(lastUsed)).toBe(true);
@@ -461,5 +547,41 @@ describe("resolveAuthProfileOrder", () => {
     } finally {
       await rm(agentDir, { force: true, recursive: true });
     }
+  });
+
+  it("uses caller-provided auth alias metadata for stored credential compatibility", () => {
+    expect(
+      isStoredCredentialCompatibleWithAuthProvider({
+        cfg: {},
+        authAliasLookupParams: {
+          config: {},
+          metadataSnapshot: {
+            plugins: [
+              {
+                id: "alias-owner",
+                origin: "global",
+                providerAuthAliases: { fixture: "provider-two" },
+              },
+            ],
+          } as never,
+        },
+        provider: "fixture",
+        credential: { type: "api_key", provider: "provider-two", key: "test" },
+      }),
+    ).toBe(true);
+  });
+
+  it("bypasses plugin auth aliases for stored credential compatibility when metadata is empty", () => {
+    expect(
+      isStoredCredentialCompatibleWithAuthProvider({
+        cfg: {},
+        authAliasLookupParams: {
+          config: {},
+          metadataSnapshot: { plugins: [] },
+        },
+        provider: "fixture",
+        credential: { type: "api_key", provider: "provider-two", key: "test" },
+      }),
+    ).toBe(false);
   });
 });

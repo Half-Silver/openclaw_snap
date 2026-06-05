@@ -1,9 +1,10 @@
+/**
+ * Activates configured Codex marketplace plugins and refreshes runtime state so
+ * plugin-owned apps/tools are visible to native Codex turns.
+ */
 import fs from "node:fs/promises";
 import path from "node:path";
-import {
-  type CodexAppInventoryCache,
-  type CodexAppInventoryRequest,
-} from "./app-inventory-cache.js";
+import type { CodexAppInventoryCache, CodexAppInventoryRequest } from "./app-inventory-cache.js";
 import { CODEX_PLUGINS_MARKETPLACE_NAME, type ResolvedCodexPluginPolicy } from "./config.js";
 import {
   findOpenAiCuratedPluginSummary,
@@ -13,6 +14,7 @@ import {
 } from "./plugin-inventory.js";
 import type { v2 } from "./protocol.js";
 
+/** Terminal reason reported after trying to activate one Codex plugin policy. */
 export type CodexPluginActivationReason =
   | "already_active"
   | "installed"
@@ -22,10 +24,12 @@ export type CodexPluginActivationReason =
   | "auth_required"
   | "refresh_failed";
 
+/** Human-readable diagnostic emitted during Codex plugin activation. */
 export type CodexPluginActivationDiagnostic = {
   message: string;
 };
 
+/** Result of ensuring one configured Codex plugin is installed and enabled. */
 export type CodexPluginActivationResult = {
   identity: ResolvedCodexPluginPolicy;
   ok: boolean;
@@ -36,6 +40,7 @@ export type CodexPluginActivationResult = {
   diagnostics: CodexPluginActivationDiagnostic[];
 };
 
+/** Inputs for activating one resolved Codex plugin policy. */
 export type EnsureCodexPluginActivationParams = {
   identity: ResolvedCodexPluginPolicy;
   request: CodexPluginRuntimeRequest;
@@ -44,16 +49,18 @@ export type EnsureCodexPluginActivationParams = {
   installEvenIfActive?: boolean;
 };
 
+/** Diagnostics from refreshing Codex runtime surfaces after plugin activation. */
 export type CodexPluginRuntimeRefreshResult = {
   diagnostics: CodexPluginActivationDiagnostic[];
 };
 
+/** Installs/enables a configured Codex plugin and refreshes plugin/app state. */
 export async function ensureCodexPluginActivation(
   params: EnsureCodexPluginActivationParams,
 ): Promise<CodexPluginActivationResult> {
   if (params.identity.marketplaceName !== CODEX_PLUGINS_MARKETPLACE_NAME) {
     return activationFailure(params.identity, "marketplace_missing", {
-      message: "Only " + CODEX_PLUGINS_MARKETPLACE_NAME + " plugins can be activated.",
+      message: "Only openai-curated plugins can be activated.",
     });
   }
 
@@ -62,6 +69,14 @@ export async function ensureCodexPluginActivation(
   } satisfies v2.PluginListParams)) as v2.PluginListResponse;
   const resolved = findOpenAiCuratedPluginSummary(listed, params.identity.pluginName);
   if (!resolved) {
+    const hasCuratedMarketplace = listed.marketplaces.some(
+      (marketplace) => marketplace.name === CODEX_PLUGINS_MARKETPLACE_NAME,
+    );
+    if (!hasCuratedMarketplace) {
+      return activationFailure(params.identity, "marketplace_missing", {
+        message: `Codex marketplace ${CODEX_PLUGINS_MARKETPLACE_NAME} was not found.`,
+      });
+    }
     return activationFailure(params.identity, "plugin_missing", {
       message: `${params.identity.pluginName} was not found in ${CODEX_PLUGINS_MARKETPLACE_NAME}.`,
     });
@@ -125,6 +140,7 @@ export async function ensureCodexPluginActivation(
   };
 }
 
+/** Forces Codex plugin, skill, hook, MCP, and app inventory refreshes after activation. */
 export async function refreshCodexPluginRuntimeState(params: {
   request: CodexPluginRuntimeRequest;
   appCache?: CodexAppInventoryCache;
@@ -171,6 +187,7 @@ export async function refreshCodexPluginRuntimeState(params: {
   return { diagnostics };
 }
 
+/** Ensures the Codex config enables app substrate support needed by plugin-owned apps. */
 export async function ensureCodexAppsSubstrateConfig(params: {
   codexHome: string;
   readFile?: (filePath: string, encoding: "utf8") => Promise<string>;
@@ -206,6 +223,7 @@ export async function ensureCodexAppsSubstrateConfig(params: {
   return { changed: true, configPath };
 }
 
+/** Upserts a boolean key in a TOML section while preserving the rest of the file. */
 export function upsertTomlBoolean(
   source: string,
   section: string,

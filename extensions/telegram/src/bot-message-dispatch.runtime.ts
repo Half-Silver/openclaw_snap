@@ -1,5 +1,7 @@
+// Telegram plugin module implements bot message dispatch behavior.
 export {
   loadSessionStore,
+  readLatestAssistantTextFromSessionTranscript,
   resolveAndPersistSessionFile,
   resolveSessionStoreEntry,
 } from "openclaw/plugin-sdk/session-store-runtime";

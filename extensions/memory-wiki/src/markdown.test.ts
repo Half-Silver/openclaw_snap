@@ -1,3 +1,4 @@
+// Memory Wiki tests cover markdown plugin behavior.
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
@@ -109,7 +110,6 @@ describe("toWikiPageSummary", () => {
       relativePath: "entities/brad.md",
       raw,
     });
-    expect(summary).not.toBeNull();
     if (!summary) {
       throw new Error("expected wiki summary");
     }

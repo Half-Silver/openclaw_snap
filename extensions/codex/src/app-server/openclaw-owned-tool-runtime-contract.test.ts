@@ -1,3 +1,4 @@
+// Codex tests cover openclaw owned tool runtime contract plugin behavior.
 import type { AnyAgentTool } from "openclaw/plugin-sdk/agent-harness";
 import { wrapToolWithBeforeToolCallHook } from "openclaw/plugin-sdk/agent-harness-runtime";
 import {
@@ -21,8 +22,6 @@ function createContractTool(overrides: Partial<AnyAgentTool>): AnyAgentTool {
 }
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
-  expect(typeof value).toBe("object");
-  expect(value).not.toBeNull();
   if (typeof value !== "object" || value === null) {
     throw new Error(`${label} was not an object`);
   }
@@ -42,7 +41,6 @@ function requireMockCall(mock: unknown, index: number, label: string): unknown[]
     throw new Error(`${label} did not expose mock calls`);
   }
   const call = calls[index];
-  expect(call).toBeDefined();
   if (!call) {
     throw new Error(`missing ${label} call ${index + 1}`);
   }

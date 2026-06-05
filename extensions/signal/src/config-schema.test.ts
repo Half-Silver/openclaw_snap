@@ -1,3 +1,4 @@
+// Signal tests cover config schema plugin behavior.
 import { describe, expect, it } from "vitest";
 import { SignalConfigSchema } from "../config-api.js";
 
@@ -86,7 +87,7 @@ describe("signal groups schema", () => {
       },
     });
 
-    expect(issues.some((issue) => issue.path.join(".") === "accounts.primary")).toBe(true);
+    expect(issues.map((issue) => issue.path.join("."))).toContain("accounts.primary");
   });
 
   it("accepts top-level group overrides", () => {
@@ -126,8 +127,6 @@ describe("signal groups schema", () => {
       },
     });
 
-    expect(issues.map((issue) => issue.path.join("."))).toContainEqual(
-      expect.stringMatching(/^groups/),
-    );
+    expect(issues.map((issue) => issue.path.join("."))).toEqual(["groups.*"]);
   });
 });

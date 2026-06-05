@@ -1,7 +1,27 @@
-import { verifyChannelMessageAdapterCapabilityProofs } from "openclaw/plugin-sdk/channel-message";
+// Qqbot tests cover channel.message adapter plugin behavior.
+import { verifyChannelMessageAdapterCapabilityProofs } from "openclaw/plugin-sdk/channel-outbound";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/config-contracts";
 import { describe, expect, it, vi } from "vitest";
 import { qqbotPlugin } from "./channel.js";
+
+describe("qqbot outbound sanitizeText", () => {
+  it("strips reasoning/thinking tags before delivery", () => {
+    const sanitize = qqbotPlugin.outbound?.sanitizeText;
+    expect(sanitize).toBeDefined();
+    if (!sanitize) {
+      return;
+    }
+
+    const input1 = "<thinking>internal reasoning</thinking>final answer";
+    expect(sanitize({ text: input1, payload: { text: input1 } })).toBe("final answer");
+
+    const input2 = "<think>step by step</think>result";
+    expect(sanitize({ text: input2, payload: { text: input2 } })).toBe("result");
+
+    const input3 = "plain text without tags";
+    expect(sanitize({ text: input3, payload: { text: input3 } })).toBe("plain text without tags");
+  });
+});
 
 const sendTextMock = vi.hoisted(() => vi.fn());
 const sendMediaMock = vi.hoisted(() => vi.fn());
@@ -17,6 +37,14 @@ type SentMediaParams = {
   text?: string;
   mediaUrl?: string;
 };
+
+function latestMockArg(mock: ReturnType<typeof vi.fn>, label: string): unknown {
+  const call = mock.mock.calls[mock.mock.calls.length - 1];
+  if (!call) {
+    throw new Error(`expected ${label} call`);
+  }
+  return call[0];
+}
 
 vi.mock("./bridge/gateway.js", () => ({}));
 vi.mock("./engine/messaging/outbound.js", () => ({
@@ -48,9 +76,9 @@ describe("qqbot message adapter", () => {
             to: "qqbot:c2c:user-1",
             text: "hello",
           });
-          const sent = sendTextMock.mock.calls.at(-1)?.[0] as SentTextParams | undefined;
-          expect(sent?.to).toBe("qqbot:c2c:user-1");
-          expect(sent?.text).toBe("hello");
+          const sent = latestMockArg(sendTextMock, "sendText") as SentTextParams;
+          expect(sent.to).toBe("qqbot:c2c:user-1");
+          expect(sent.text).toBe("hello");
           expect(result?.receipt.platformMessageIds).toEqual(["qq-text-1"]);
         },
         media: async () => {
@@ -60,10 +88,10 @@ describe("qqbot message adapter", () => {
             text: "image",
             mediaUrl: "https://example.com/image.png",
           });
-          const sent = sendMediaMock.mock.calls.at(-1)?.[0] as SentMediaParams | undefined;
-          expect(sent?.to).toBe("qqbot:c2c:user-1");
-          expect(sent?.text).toBe("image");
-          expect(sent?.mediaUrl).toBe("https://example.com/image.png");
+          const sent = latestMockArg(sendMediaMock, "sendMedia") as SentMediaParams;
+          expect(sent.to).toBe("qqbot:c2c:user-1");
+          expect(sent.text).toBe("image");
+          expect(sent.mediaUrl).toBe("https://example.com/image.png");
           expect(result?.receipt.platformMessageIds).toEqual(["qq-media-1"]);
         },
         replyTo: async () => {
@@ -73,10 +101,10 @@ describe("qqbot message adapter", () => {
             text: "reply",
             replyToId: "msg-1",
           });
-          const sent = sendTextMock.mock.calls.at(-1)?.[0] as SentTextParams | undefined;
-          expect(sent?.to).toBe("qqbot:group:group-1");
-          expect(sent?.text).toBe("reply");
-          expect(sent?.replyToId).toBe("msg-1");
+          const sent = latestMockArg(sendTextMock, "sendText") as SentTextParams;
+          expect(sent.to).toBe("qqbot:group:group-1");
+          expect(sent.text).toBe("reply");
+          expect(sent.replyToId).toBe("msg-1");
           expect(result?.receipt.platformMessageIds).toEqual(["qq-text-1"]);
         },
       },

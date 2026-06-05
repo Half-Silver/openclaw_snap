@@ -1,3 +1,4 @@
+// Verifies node camera/photo tool payloads, media URLs, and vision gating.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   readFileUtf8AndCleanup,
@@ -10,7 +11,7 @@ const { callGateway } = vi.hoisted(() => ({
 }));
 
 vi.mock("../gateway/call.js", () => ({ callGateway }));
-vi.mock("../media/image-ops.js", () => ({
+vi.mock("../media/media-services.js", () => ({
   getImageMetadata: vi.fn(async () => ({ width: 1, height: 1 })),
   resizeToJpeg: vi.fn(async () => Buffer.from("jpeg")),
 }));
@@ -47,6 +48,7 @@ function unexpectedGatewayMethod(method: unknown): never {
 }
 
 function getNodesTool(options?: { modelHasVision?: boolean; allowMediaInvokeCommands?: boolean }) {
+  // Tests vary only model vision capability and media invoke permission.
   return createNodesTool({
     ...(options?.modelHasVision !== undefined ? { modelHasVision: options.modelHasVision } : {}),
     ...(options?.allowMediaInvokeCommands !== undefined
@@ -80,6 +82,7 @@ function expectInvokeParams(
     params?: Record<string, unknown>;
   },
 ) {
+  // Node command payloads are nested under the gateway node.invoke params object.
   const record = requireRecord(invokeParams, "node.invoke params");
   expect(record.command).toBe(expected.command);
   if (expected.nodeId !== undefined) {
@@ -105,10 +108,13 @@ function mockNodeList(params?: { commands?: string[]; remoteIp?: string }) {
 
 function expectSingleImage(result: NodesToolResult, params?: { mimeType?: string }) {
   const images = (result.content ?? []).filter((block) => block.type === "image");
-  expect(images).toHaveLength(1);
-  if (params?.mimeType) {
-    expect(images[0]?.mimeType).toBe(params.mimeType);
-  }
+  expect(images).toEqual([
+    {
+      type: "image",
+      data: JPG_PAYLOAD.base64,
+      mimeType: params?.mimeType ?? "image/jpeg",
+    },
+  ]);
 }
 
 function expectNoImages(result: NodesToolResult) {
@@ -143,6 +149,7 @@ function setupNodeInvokeMock(params: {
   onInvoke?: (invokeParams: unknown) => GatewayMockResult | Promise<GatewayMockResult>;
   invokePayload?: unknown;
 }) {
+  // Most camera tests need node.list followed by one node.invoke command.
   callGateway.mockImplementation(async ({ method, params: invokeParams }: GatewayCall) => {
     if (method === "node.list") {
       return mockNodeList({ commands: params.commands, remoteIp: params.remoteIp });

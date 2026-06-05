@@ -1,3 +1,4 @@
+// Discord plugin module implements send.messages behavior.
 import type { APIChannel, APIMessage } from "discord-api-types/v10";
 import { ChannelType } from "discord-api-types/v10";
 import {
@@ -88,7 +89,10 @@ export async function editMessageDiscord(
 ): Promise<APIMessage> {
   const rest = resolveDiscordRest(opts);
   return await editChannelMessage(rest, channelId, messageId, {
-    body: { content: payload.content },
+    body: {
+      content: payload.content,
+      ...(payload.flags !== undefined ? { flags: payload.flags } : {}),
+    },
   });
 }
 

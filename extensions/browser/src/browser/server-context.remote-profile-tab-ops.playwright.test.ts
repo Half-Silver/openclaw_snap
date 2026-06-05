@@ -1,3 +1,4 @@
+// Browser tests cover server context.remote profile tab ops.playwright plugin behavior.
 import { describe, expect, it, vi } from "vitest";
 import {
   installRemoteProfileTestLifecycle,
@@ -206,6 +207,41 @@ describe("browser remote profile tab ops via Playwright", () => {
     expect(first.targetId).toBe("A");
     const second = await remote.ensureTabAvailable();
     expect(second.targetId).toBe("A");
+  });
+
+  it("opens a real remote Playwright tab when only browser-internal targets are listed", async () => {
+    const internalTab = {
+      targetId: "OMNI",
+      title: "Omnibox Popup",
+      url: "chrome://omnibox-popup.top-chrome/",
+      type: "page" as const,
+    };
+    const realTab = {
+      targetId: "REAL",
+      title: "New Tab",
+      url: "about:blank",
+      type: "page" as const,
+    };
+    const listPagesViaPlaywright = vi.fn(
+      deps.createSequentialPageLister([[internalTab], [internalTab, realTab]]),
+    );
+    const createPageViaPlaywright = vi.fn(async () => realTab);
+
+    vi.spyOn(deps.pwAiModule, "getPwAiModule").mockResolvedValue({
+      listPagesViaPlaywright,
+      createPageViaPlaywright,
+    } as unknown as Awaited<ReturnType<typeof deps.pwAiModule.getPwAiModule>>);
+
+    const { state, remote } = deps.createRemoteRouteHarness();
+
+    const selected = await remote.ensureTabAvailable();
+    expect(selected.targetId).toBe("REAL");
+    expect(state.profiles.get("remote")?.lastTargetId).toBe("REAL");
+    expect(createPageViaPlaywright).toHaveBeenCalledWith({
+      cdpUrl: "https://1.1.1.1:9222/chrome?token=abc",
+      url: "about:blank",
+      ssrfPolicy: { allowPrivateNetwork: true },
+    });
   });
 
   it("rejects stale targetId for remote profiles even when only one tab remains", async () => {

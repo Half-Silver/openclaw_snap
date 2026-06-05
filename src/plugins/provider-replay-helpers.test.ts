@@ -1,3 +1,4 @@
+/** Tests provider replay helper normalization and deterministic ordering. */
 import { describe, expect, it } from "vitest";
 import {
   buildAnthropicReplayPolicyForModel,
@@ -12,8 +13,9 @@ import {
 } from "./provider-replay-helpers.js";
 
 function expectFields(actual: unknown, expected: Record<string, unknown>): void {
-  expect(actual).toBeDefined();
-  expect(typeof actual).toBe("object");
+  if (!actual || typeof actual !== "object") {
+    throw new Error("Expected record");
+  }
   const record = actual as Record<string, unknown>;
   for (const [key, value] of Object.entries(expected)) {
     expect(record[key]).toEqual(value);
@@ -77,6 +79,7 @@ describe("provider replay helpers", () => {
       applyAssistantFirstOrderingFix: false,
       validateGeminiTurns: false,
       validateAnthropicTurns: false,
+      allowSyntheticToolResults: true,
     });
     expect(policy).not.toHaveProperty("sanitizeToolCallIds");
     expect(policy).not.toHaveProperty("toolCallIdMode");

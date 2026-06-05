@@ -1,17 +1,27 @@
+// Normalizes inbound message metadata before it is exposed to reply prompts.
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
+import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { normalizeChatType } from "../../channels/chat-type.js";
 import { getLoadedChannelPluginById } from "../../channels/plugins/registry-loaded.js";
 import type { ChannelPlugin } from "../../channels/plugins/types.plugin.js";
 import { normalizeAnyChannelId } from "../../channels/registry.js";
 import { resolveSenderLabel } from "../../channels/sender-label.js";
-import { normalizeOptionalString } from "../../shared/string-coerce.js";
 import { truncateUtf16Safe } from "../../utils.js";
 import type { EnvelopeFormatOptions } from "../envelope.js";
 import { formatEnvelopeTimestamp } from "../envelope.js";
+import type { SourceReplyDeliveryMode } from "../get-reply-options.types.js";
 import type { TemplateContext } from "../templating.js";
 
 const MAX_UNTRUSTED_JSON_STRING_CHARS = 2_000;
 const MAX_UNTRUSTED_HISTORY_ENTRIES = 20;
 const MAX_UNTRUSTED_TRANSCRIPT_FIELD_CHARS = 500;
+const MESSAGE_TOOL_DELIVERY_HINT =
+  "Delivery: Final assistant text is not automatically delivered in this run. Use the `message` tool to send user-visible output.";
+
+/** Options for building the user-context prefix added to inbound prompts. */
+type InboundUserContextPrefixOptions = {
+  sourceReplyDeliveryMode?: SourceReplyDeliveryMode;
+};
 
 function stripNullBytes(value: string): string {
   return value.replaceAll("\u0000", "");
@@ -68,10 +78,6 @@ function sanitizeUntrustedJsonValue(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value).map(([key, entry]) => [key, sanitizeUntrustedJsonValue(entry)]),
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function truncateUntrustedTranscriptField(value: string): string {
@@ -244,6 +250,25 @@ function buildLocationContextPayload(ctx: TemplateContext): Record<string, unkno
   return Object.values(payload).some((value) => value !== undefined) ? payload : undefined;
 }
 
+function buildInboundHistoryMediaPromptPayload(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) {
+      return [];
+    }
+    const payload = {
+      kind: normalizePromptMetadataString(entry["kind"]),
+      content_type: normalizePromptMetadataString(entry["contentType"]),
+      message_id: normalizePromptMetadataString(entry["messageId"]),
+      has_local_path: normalizePromptMetadataString(entry["path"]) ? true : undefined,
+      has_url: normalizePromptMetadataString(entry["url"]) ? true : undefined,
+    };
+    return Object.values(payload).some((field) => field !== undefined) ? [payload] : [];
+  });
+}
+
 function buildReplyChainPayload(ctx: TemplateContext): Array<Record<string, unknown>> {
   if (!Array.isArray(ctx.ReplyChain)) {
     return [];
@@ -321,6 +346,7 @@ function formatTelegramCurrentMessageContext(ctx: TemplateContext): string | und
     .join("\n");
 }
 
+/** Resolves whether inbound context should join directly with the user body. */
 export function resolveInboundUserContextPromptJoiner(ctx: TemplateContext): " " | undefined {
   return formatTelegramCurrentMessageContext(ctx) ? " " : undefined;
 }
@@ -365,6 +391,7 @@ function resolveInboundFormattingHints(ctx: TemplateContext):
   });
 }
 
+/** Builds trusted system metadata for the inbound channel and formatting hints. */
 export function buildInboundMetaSystemPrompt(
   ctx: TemplateContext,
   options?: { includeFormattingHints?: boolean },
@@ -408,11 +435,16 @@ export function buildInboundMetaSystemPrompt(
   ].join("\n");
 }
 
+/** Builds untrusted inbound context text that prefixes the user-visible body. */
 export function buildInboundUserContextPrefix(
   ctx: TemplateContext,
   envelope?: EnvelopeFormatOptions,
+  options?: InboundUserContextPrefixOptions,
 ): string {
   const blocks: string[] = [];
+  if (options?.sourceReplyDeliveryMode === "message_tool_only") {
+    blocks.push(MESSAGE_TOOL_DELIVERY_HINT);
+  }
   const chatType = normalizeChatType(ctx.ChatType);
   const isDirect = !chatType || chatType === "direct";
   const directChannelValue = resolveInboundChannel(ctx);
@@ -427,6 +459,10 @@ export function buildInboundUserContextPrefix(
   const timestampStr = formatConversationTimestamp(ctx.Timestamp, envelope);
   const inboundHistory = Array.isArray(ctx.InboundHistory) ? ctx.InboundHistory : [];
   const boundedHistory = inboundHistory.slice(-MAX_UNTRUSTED_HISTORY_ENTRIES);
+  const historyMediaCount = boundedHistory.reduce(
+    (count, entry) => count + buildInboundHistoryMediaPromptPayload(entry.media).length,
+    0,
+  );
   const replyChainPayload = buildReplyChainPayload(ctx);
   const structuredContext = Array.isArray(ctx.UntrustedStructuredContext)
     ? ctx.UntrustedStructuredContext
@@ -436,8 +472,8 @@ export function buildInboundUserContextPrefix(
   const chatWindowCoversReplyContext =
     replyChainPayload.length > 0
       ? replyChainPayload.every((entry) => {
-          const messageId = normalizePromptMetadataString(entry["message_id"]);
-          return messageId ? chatWindowMessageIds.has(messageId) : false;
+          const messageIdLocal = normalizePromptMetadataString(entry["message_id"]);
+          return messageIdLocal ? chatWindowMessageIds.has(messageIdLocal) : false;
         })
       : Boolean(replyToId && chatWindowMessageIds.has(replyToId));
   const chatWindowCoversHistory = structuredContext.some(isChatWindowHistoryContext);
@@ -467,6 +503,7 @@ export function buildInboundUserContextPrefix(
     group_space: normalizePromptMetadataString(ctx.GroupSpace),
     group_members: sanitizePromptBody(ctx.GroupMembers),
     thread_label: normalizePromptMetadataString(ctx.ThreadLabel),
+    inbound_event_kind: ctx.InboundEventKind,
     topic_id:
       ctx.MessageThreadId != null
         ? (normalizePromptMetadataString(String(ctx.MessageThreadId)) ?? undefined)
@@ -479,6 +516,7 @@ export function buildInboundUserContextPrefix(
     has_forwarded_context: normalizePromptMetadataString(ctx.ForwardedFrom) ? true : undefined,
     has_thread_starter: sanitizePromptBody(ctx.ThreadStarterBody) ? true : undefined,
     history_count: boundedHistory.length > 0 ? boundedHistory.length : undefined,
+    history_media_count: historyMediaCount > 0 ? historyMediaCount : undefined,
     history_truncated: inboundHistory.length > MAX_UNTRUSTED_HISTORY_ENTRIES ? true : undefined,
   };
   if (Object.values(conversationInfo).some((v) => v !== undefined)) {
@@ -575,11 +613,16 @@ export function buildInboundUserContextPrefix(
     blocks.push(
       formatUntrustedJsonBlock(
         "Chat history since last reply (untrusted, for context):",
-        boundedHistory.map((entry) => ({
-          sender: sanitizePromptBody(entry.sender),
-          timestamp_ms: entry.timestamp,
-          body: sanitizePromptBody(entry.body),
-        })),
+        boundedHistory.map((entry) => {
+          const media = buildInboundHistoryMediaPromptPayload(entry.media);
+          return {
+            sender: sanitizePromptBody(entry.sender),
+            timestamp_ms: entry.timestamp,
+            message_id: normalizePromptMetadataString(entry.messageId),
+            body: sanitizePromptBody(entry.body),
+            media: media.length > 0 ? media : undefined,
+          };
+        }),
       ),
     );
   }

@@ -1,3 +1,4 @@
+// Opencode tests cover index plugin behavior.
 import {
   registerProviderPlugin,
   requireRegisteredProvider,
@@ -15,11 +16,13 @@ describe("opencode provider plugin", () => {
     });
 
     const mediaProvider = mediaProviders.find((provider) => provider.id === "opencode");
-    expect(mediaProvider).toBeDefined();
-    expect(mediaProvider?.capabilities).toEqual(["image"]);
-    expect(mediaProvider?.defaultModels).toEqual({ image: "gpt-5-nano" });
-    expect(typeof mediaProvider?.describeImage).toBe("function");
-    expect(typeof mediaProvider?.describeImages).toBe("function");
+    if (!mediaProvider) {
+      throw new Error("Expected opencode media provider");
+    }
+    expect(mediaProvider.capabilities).toEqual(["image"]);
+    expect(mediaProvider.defaultModels).toEqual({ image: "gpt-5-nano" });
+    expect(typeof mediaProvider.describeImage).toBe("function");
+    expect(typeof mediaProvider.describeImages).toBe("function");
   });
 
   it("owns passthrough-gemini replay policy for Gemini-backed models", async () => {
