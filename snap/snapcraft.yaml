@@ -94,7 +94,7 @@ parts:
       
       # Download and extract Node.js
       echo "Downloading Node.js for ${NODE_ARCH}..."
-      curl -fsSL https://nodejs.org/dist/v22.18.0/node-v22.18.0-linux-${NODE_ARCH}.tar.gz -o node.tar.gz
+      curl -fsSL https://nodejs.org/dist/v22.19.0/node-v22.19.0-linux-${NODE_ARCH}.tar.gz -o node.tar.gz
       mkdir -p $SNAPCRAFT_PART_INSTALL
       tar -xzf node.tar.gz -C $SNAPCRAFT_PART_INSTALL --strip-components=1
       rm node.tar.gz
@@ -103,12 +103,18 @@ parts:
       # Put node in PATH for the build
       export PATH=$SNAPCRAFT_PART_INSTALL/bin:$PATH
       
-      # Install pnpm
-      npm install -g pnpm@10.33.2
+      # Install pnpm (match packageManager pin in package.json)
+      npm install -g pnpm@11.2.2
       export CI=true
       
       # Install dependencies and build
-      # Use hoisted linker to avoid external symlinks to the pnpm store
+      # Use hoisted linker to avoid external symlinks to the pnpm store.
+      # Large platform binaries (codex, copilot, lancedb, claude-agent-sdk) can
+      # crawl on slow links; widen pnpm fetch timeout/retries so they don't abort.
+      export npm_config_fetch_timeout=1200000
+      export npm_config_fetch_retries=5
+      export npm_config_fetch_retry_mintimeout=20000
+      export npm_config_fetch_retry_maxtimeout=1200000
       pnpm install --frozen-lockfile --node-linker=hoisted
       pnpm build
       
@@ -154,8 +160,16 @@ parts:
     source: ../all_snap_plugin
     organize:
       src/ct_engine.py: bin/ct-engine
+      snap/hooks/configure: snap/hooks/ct-configure
+      snap/hooks/pre-refresh: snap/hooks/pre-refresh
+      snap/hooks/post-refresh: snap/hooks/ct-post-refresh
+      snap/hooks/remove: snap/hooks/remove
     stage:
       - bin/ct-engine
+      - snap/hooks/ct-configure
+      - snap/hooks/pre-refresh
+      - snap/hooks/ct-post-refresh
+      - snap/hooks/remove
 
   plugin-manifest:
     plugin: dump
