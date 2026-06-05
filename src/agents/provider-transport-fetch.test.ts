@@ -416,6 +416,97 @@ describe("buildGuardedModelFetch", () => {
     expect(items).toEqual([{ ok: true }]);
   });
 
+  it("remaps reasoning-only SSE deltas into content so reasoning models are not silently dropped", async () => {
+    const encoder = new TextEncoder();
+    fetchWithSsrFGuardMock.mockResolvedValue({
+      response: new Response(
+        new ReadableStream({
+          start(controller) {
+            // OpenRouter-style reasoning delta: the answer arrives in `reasoning`
+            // with content empty (what openrouter/free emits).
+            controller.enqueue(
+              encoder.encode(
+                'data: {"choices":[{"delta":{"role":"assistant","content":"","reasoning":"the answer is 1081"}}]}\n\n',
+              ),
+            );
+            // DeepSeek-style: `reasoning_content`, with no content key at all.
+            controller.enqueue(
+              encoder.encode(
+                'data: {"choices":[{"delta":{"reasoning_content":"more thinking"}}]}\n\n',
+              ),
+            );
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+      finalUrl: "https://openrouter.ai/api/v1/chat/completions",
+      release: vi.fn(async () => undefined),
+    });
+    const model = {
+      id: "openrouter/free",
+      provider: "openrouter",
+      api: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+    } as unknown as Model<"openai-completions">;
+
+    const response = await buildGuardedModelFetch(model)(
+      "https://openrouter.ai/api/v1/chat/completions",
+      { method: "POST" },
+    );
+    const items = [];
+    for await (const item of Stream.fromSSEResponse(response, new AbortController())) {
+      items.push(item);
+    }
+
+    const deltas = items.map(
+      (item) => (item as { choices?: Array<{ delta?: { content?: string } }> }).choices?.[0]?.delta,
+    );
+    expect(deltas[0]?.content).toBe("the answer is 1081");
+    expect(deltas[1]?.content).toBe("more thinking");
+  });
+
+  it("leaves SSE deltas that already carry content untouched", async () => {
+    const encoder = new TextEncoder();
+    fetchWithSsrFGuardMock.mockResolvedValue({
+      response: new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                'data: {"choices":[{"delta":{"content":"hi","reasoning":"ignore me"}}]}\n\n',
+              ),
+            );
+            controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+            controller.close();
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+      finalUrl: "https://openrouter.ai/api/v1/chat/completions",
+      release: vi.fn(async () => undefined),
+    });
+    const model = {
+      id: "openrouter/free",
+      provider: "openrouter",
+      api: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+    } as unknown as Model<"openai-completions">;
+
+    const response = await buildGuardedModelFetch(model)(
+      "https://openrouter.ai/api/v1/chat/completions",
+      { method: "POST" },
+    );
+    const items = [];
+    for await (const item of Stream.fromSSEResponse(response, new AbortController())) {
+      items.push(item);
+    }
+    const delta = (items[0] as { choices?: Array<{ delta?: { content?: string } }> }).choices?.[0]
+      ?.delta;
+    expect(delta?.content).toBe("hi");
+  });
+
   it("synthesizes SSE frames for JSON bodies returned to streaming OpenAI SDK requests", async () => {
     fetchWithSsrFGuardMock.mockResolvedValue({
       response: new Response('  {"ok": true}  ', {
