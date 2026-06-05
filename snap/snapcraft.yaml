@@ -108,11 +108,11 @@ parts:
       export CI=true
 
       # Only fetch optional binaries for this snap's target (linux / detected arch
-      # / glibc). Without this, pnpm downloads darwin/android/freebsd/musl/foreign
-      # variants of codex/copilot/lancedb/claude-agent-sdk/davey etc., which bloats
-      # the build and exhausts disk during `pnpm prune --prod`. Build-only edit to
-      # the working copy of package.json (not committed).
-      node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.pnpm=p.pnpm||{};p.pnpm.supportedArchitectures={os:['linux'],cpu:['${NODE_ARCH}'],libc:['glibc']};fs.writeFileSync('package.json',JSON.stringify(p,null,2));"
+      # / glibc) so the build doesn't pull darwin/android/freebsd/musl/foreign
+      # variants of codex/copilot/lancedb/claude-agent-sdk/davey (bloat + prune
+      # ENOSPC). pnpm 11 reads supportedArchitectures from pnpm-workspace.yaml,
+      # not the package.json "pnpm" field. Build-only edit (not committed).
+      printf '\nsupportedArchitectures:\n  os:\n    - linux\n  cpu:\n    - %s\n  libc:\n    - glibc\n' "${NODE_ARCH}" >> pnpm-workspace.yaml
       
       # Install dependencies and build
       # Use hoisted linker to avoid external symlinks to the pnpm store.
