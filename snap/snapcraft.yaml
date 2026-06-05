@@ -121,7 +121,7 @@ parts:
         echo "fetch-retry-maxtimeout=1200000"
       } >> .npmrc
       install_ok=false
-      for attempt in 1 2 3 4 5 6 7 8; do
+      for attempt in 1 2 3 4; do
         if pnpm install --frozen-lockfile --node-linker=hoisted; then
           install_ok=true
           break
@@ -130,9 +130,12 @@ parts:
         sleep 15
       done
       if [ "$install_ok" != true ]; then
-        echo "ERROR: pnpm install failed after 8 attempts (network too unstable for the large optional binaries)." >&2
-        echo "Fallback: append --no-optional to the pnpm install line to skip codex/copilot/lancedb/tlon binaries you do not use." >&2
-        exit 1
+        # Last resort for hopeless links: skip optional platform binaries. The
+        # ones that abort here (codex/copilot/lancedb/tlon/acpx) belong to
+        # extensions this snap already excludes from dist, so dropping them is
+        # safe and lets the build finish.
+        echo "Full install kept failing; falling back to --no-optional (skips excluded-extension binaries)..." >&2
+        pnpm install --frozen-lockfile --node-linker=hoisted --no-optional
       fi
       pnpm build
       
