@@ -109,13 +109,31 @@ parts:
       
       # Install dependencies and build
       # Use hoisted linker to avoid external symlinks to the pnpm store.
-      # Large platform binaries (codex, copilot, lancedb, claude-agent-sdk) can
-      # crawl on slow links; widen pnpm fetch timeout/retries so they don't abort.
-      export npm_config_fetch_timeout=1200000
-      export npm_config_fetch_retries=5
-      export npm_config_fetch_retry_mintimeout=20000
-      export npm_config_fetch_retry_maxtimeout=1200000
-      pnpm install --frozen-lockfile --node-linker=hoisted
+      # Large platform binaries (codex, copilot, lancedb, claude-agent-sdk) crawl
+      # on slow/flaky links, and pnpm ignores npm_config_* env here. Write fetch
+      # resilience into .npmrc (which pnpm does read) and retry the whole install:
+      # each attempt resumes from the pnpm store cache, so flaky socket drops
+      # still make incremental progress until everything is local.
+      {
+        echo "fetch-timeout=1200000"
+        echo "fetch-retries=8"
+        echo "fetch-retry-mintimeout=20000"
+        echo "fetch-retry-maxtimeout=1200000"
+      } >> .npmrc
+      install_ok=false
+      for attempt in 1 2 3 4 5 6 7 8; do
+        if pnpm install --frozen-lockfile --node-linker=hoisted; then
+          install_ok=true
+          break
+        fi
+        echo "pnpm install attempt ${attempt} failed; retrying in 15s..."
+        sleep 15
+      done
+      if [ "$install_ok" != true ]; then
+        echo "ERROR: pnpm install failed after 8 attempts (network too unstable for the large optional binaries)." >&2
+        echo "Fallback: append --no-optional to the pnpm install line to skip codex/copilot/lancedb/tlon binaries you do not use." >&2
+        exit 1
+      fi
       pnpm build
       
       # Force IPv4 preference in compiled SSRF dispatcher to avoid IPv6 timeouts
